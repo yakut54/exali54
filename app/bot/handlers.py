@@ -126,8 +126,21 @@ async def handle_update(payload: dict, max_client: MaxClient) -> None:
             await max_client.send_message(cid, _home_text(user["tax_mode"]), buttons=main_menu_keyboard())
     elif update_type == "message_callback":
         await _handle_callback(payload, max_client)
-    elif update_type == "message_created" and _extract_text(payload).startswith("/start"):
+    elif update_type == "message_created":
         cid, uid = _extract_chat_id(payload), _extract_user_id(payload)
-        if cid is not None and uid is not None:
-            user = await get_or_create_user(uid)
+        if cid is None or uid is None:
+            return
+        user = await get_or_create_user(uid)
+        text = _extract_text(payload).lower()
+
+        if text.startswith("/tax"):
+            msg = f"**⚙️ Система налогообложения**\nСейчас: **{TAX_LABELS.get(user['tax_mode'], user['tax_mode'])}**"
+            await max_client.send_message(cid, msg, buttons=tax_modes_keyboard(user["tax_mode"]))
+        elif text.startswith("/calc"):
+            msg = "**🧮 Стоп-цена и маржа**\nНапиши рейс одной строкой:\n`нск омск 20т 140 с ндс / 100 ип подача 40`"
+            await max_client.send_message(cid, msg, buttons=back_to_home_keyboard())
+        elif text.startswith("/inn"):
+            msg = "**🛡 Проверка ИНН**\nОтправь `10` или `12` цифр ИНН контрагента:"
+            await max_client.send_message(cid, msg, buttons=back_to_home_keyboard())
+        else:
             await max_client.send_message(cid, _home_text(user["tax_mode"]), buttons=main_menu_keyboard())

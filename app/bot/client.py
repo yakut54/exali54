@@ -57,6 +57,19 @@ class MaxClient:
             return {}
         return response.json()
 
+    async def set_commands(self) -> dict:
+        commands = [
+            {"name": "start", "description": "🏠 Главное меню"},
+            {"name": "calc", "description": "🧮 Стоп-цена и маржа"},
+            {"name": "inn", "description": "🛡 Проверить ИНН"},
+            {"name": "tax", "description": "⚙️ Налоговый режим"},
+        ]
+        response = await self._client.patch("/me/commands", json={"commands": commands})
+        if response.is_error:
+            logger.warning("MAX PATCH /me/commands failed (%s): %s", response.status_code, response.text)
+            return {}
+        return response.json()
+
     async def set_webhook(self, url: str, secret: str | None = None) -> dict:
         body: dict = {"url": url, "update_types": UPDATE_TYPES}
         if secret:
@@ -83,7 +96,9 @@ class MaxClient:
         for sub in await self.get_subscriptions():
             if isinstance(sub, dict) and (old_url := sub.get("url")):
                 await self.delete_subscription(old_url)
-        return await self.set_webhook(url, secret)
+        result = await self.set_webhook(url, secret)
+        await self.set_commands()
+        return result
 
     async def aclose(self) -> None:
         await self._client.aclose()
