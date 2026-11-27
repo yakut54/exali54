@@ -5,7 +5,13 @@ from config import settings
 logger = logging.getLogger("max-bot.client")
 
 WEBHOOK_URL = settings.MAX_WEBHOOK_URL
-UPDATE_TYPES = ["message_created", "bot_started", "message_callback"]
+UPDATE_TYPES = [
+    "message_created",
+    "bot_started",
+    "message_callback",
+    "message_removed",
+    "dialog_cleared",
+]
 
 
 class MaxClient:
@@ -27,10 +33,22 @@ class MaxClient:
         return body
 
     async def send_message(
-        self, chat_id: int, text: str, buttons: list[list[dict]] | None = None
+        self,
+        chat_id: int | None,
+        text: str,
+        buttons: list[list[dict]] | None = None,
+        user_id: int | None = None,
     ) -> dict:
+        params: dict = {}
+        if chat_id is not None:
+            params["chat_id"] = chat_id
+        elif user_id is not None:
+            params["user_id"] = user_id
+        else:
+            raise ValueError("Either chat_id or user_id is required")
+
         response = await self._client.post(
-            "/messages", params={"chat_id": chat_id}, json=self._build_body(text, buttons)
+            "/messages", params=params, json=self._build_body(text, buttons)
         )
         response.raise_for_status()
         return response.json()

@@ -57,8 +57,7 @@ def _home_text(tax_mode: str) -> str:
     return (
         "**🚛 Ехали! • Ассистент логиста**\n"
         f"Налог: **{tax_name}**\n\n"
-        "Пришли параметры рейса или выбери инструмент:\n"
-        "_(Если кнопки пропадут — просто напиши любое слово)_"
+        "Пришли параметры рейса или выбери инструмент:"
     )
 
 
@@ -120,11 +119,13 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
 
 async def handle_update(payload: dict, max_client: MaxClient) -> None:
     update_type = payload.get("update_type")
-    if update_type == "bot_started":
+    if update_type in ("bot_started", "message_removed", "dialog_cleared"):
         cid, uid = _extract_chat_id(payload), _extract_user_id(payload)
-        if cid is not None and uid is not None:
+        if uid is not None:
             user = await get_or_create_user(uid)
-            await max_client.send_message(cid, _home_text(user["tax_mode"]), buttons=main_menu_keyboard())
+            await max_client.send_message(
+                cid, _home_text(user["tax_mode"]), buttons=main_menu_keyboard(), user_id=uid
+            )
     elif update_type == "message_callback":
         await _handle_callback(payload, max_client)
     elif update_type == "message_created":
