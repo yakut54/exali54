@@ -7,7 +7,7 @@ from config import settings
 logger = logging.getLogger("max-bot.client")
 
 WEBHOOK_URL = settings.MAX_WEBHOOK_URL
-UPDATE_TYPES = ["message_created", "bot_started"]
+UPDATE_TYPES = ["message_created", "bot_started", "message_callback"]
 
 
 class MaxClient:
@@ -20,12 +20,44 @@ class MaxClient:
             timeout=30.0,
         )
 
-    async def send_message(self, chat_id: int, text: str) -> dict:
-        """Send a text message to a chat."""
+    async def send_message(
+        self,
+        chat_id: int,
+        text: str,
+        buttons: list[list[dict]] | None = None,
+    ) -> dict:
+        """Send a text message with optional inline keyboard to a chat."""
+        body: dict = {"text": text}
+        if buttons:
+            body["attachments"] = [
+                {
+                    "type": "inline_keyboard",
+                    "payload": {"buttons": buttons},
+                }
+            ]
+
         response = await self._client.post(
             "/messages",
             params={"chat_id": chat_id},
-            json={"text": text},
+            json=body,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def answer_callback(
+        self,
+        callback_id: str,
+        notification: str | None = None,
+    ) -> dict:
+        """Acknowledge an inline button click in MAX."""
+        body: dict = {}
+        if notification:
+            body["notification"] = notification
+
+        response = await self._client.post(
+            "/answers",
+            params={"callback_id": callback_id},
+            json=body,
         )
         response.raise_for_status()
         return response.json()
