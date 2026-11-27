@@ -1,3 +1,16 @@
 exali54.ru {
-    reverse_proxy bot:8000
+	log {
+		output stdout
+		format filter {
+			request>headers>X-Max-Bot-Api-Secret replace REDACTED
+		}
+	}
+
+	# MAX trusts RSA chains from Let's Encrypt more reliably than the new
+	# ECDSA hierarchy (YE1 / Root YE), so force an RSA-2048 certificate.
+	tls {
+		key_type rsa2048
+	}
+
+	reverse_proxy bot:8000
 }
