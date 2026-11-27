@@ -1,0 +1,32 @@
+# Секреты
+.env
+.env.*
+!.env.example
+
+# Python и кэш проверок
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Редактор и ОС (Windows / macOS)
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Логи и локальные данные Docker
+*.log
+pgdata/
+caddy_data/
+caddy_config/
+
+# На вырост для Mini App (Vue 3)
+node_modules/
+dist/
+
+.ssh/
