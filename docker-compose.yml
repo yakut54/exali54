@@ -3,6 +3,8 @@ services:
     image: postgres:16-alpine
     restart: always
     env_file: .env
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -38,3 +40,4 @@ volumes:
   pgdata:
   caddy_data:
   caddy_config:
+
