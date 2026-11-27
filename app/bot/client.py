@@ -1,7 +1,5 @@
 import logging
-
 import httpx
-
 from config import settings
 
 logger = logging.getLogger("max-bot.client")
@@ -20,59 +18,49 @@ class MaxClient:
             timeout=30.0,
         )
 
-    async def send_message(
-        self,
-        chat_id: int,
-        text: str,
-        buttons: list[list[dict]] | None = None,
-    ) -> dict:
-        """Send a text message with optional inline keyboard to a chat."""
-        body: dict = {"text": text}
-        if buttons:
-            body["attachments"] = [
-                {
-                    "type": "inline_keyboard",
-                    "payload": {"buttons": buttons},
-                }
-            ]
+    def _build_body(self, text: str, buttons: list[list[dict]] | None) -> dict:
+        body: dict = {"text": text, "format": "markdown"}
+        if buttons is not None:
+            body["attachments"] = (
+                [{"type": "inline_keyboard", "payload": {"buttons": buttons}}] if buttons else []
+            )
+        return body
 
+    async def send_message(
+        self, chat_id: int, text: str, buttons: list[list[dict]] | None = None
+    ) -> dict:
         response = await self._client.post(
-            "/messages",
-            params={"chat_id": chat_id},
-            json=body,
+            "/messages", params={"chat_id": chat_id}, json=self._build_body(text, buttons)
         )
         response.raise_for_status()
         return response.json()
 
-    async def answer_callback(
-        self,
-        callback_id: str,
-        notification: str | None = None,
+    async def edit_message(
+        self, message_id: str, text: str, buttons: list[list[dict]] | None = None
     ) -> dict:
-        """Acknowledge an inline button click in MAX."""
+        response = await self._client.put(
+            "/messages", params={"message_id": message_id}, json=self._build_body(text, buttons)
+        )
+        if response.is_error:
+            logger.warning("MAX PUT /messages failed (%s): %s", response.status_code, response.text)
+            return {}
+        return response.json()
+
+    async def answer_callback(self, callback_id: str, notification: str | None = None) -> dict:
         if not notification:
             return {}
-
         response = await self._client.post(
-            "/answers",
-            params={"callback_id": callback_id},
-            json={"notification": notification},
+            "/answers", params={"callback_id": callback_id}, json={"notification": notification}
         )
         if response.is_error:
             logger.warning("MAX /answers failed (%s): %s", response.status_code, response.text)
             return {}
         return response.json()
 
-
     async def set_webhook(self, url: str, secret: str | None = None) -> dict:
-        """Subscribe the bot to webhook updates at the given URL."""
-        body: dict = {
-            "url": url,
-            "update_types": UPDATE_TYPES,
-        }
+        body: dict = {"url": url, "update_types": UPDATE_TYPES}
         if secret:
             body["secret"] = secret
-
         response = await self._client.post("/subscriptions", json=body)
         response.raise_for_status()
         data = response.json()
@@ -81,36 +69,21 @@ class MaxClient:
         return data
 
     async def get_subscriptions(self) -> list[dict]:
-        """Return the list of active webhook subscriptions."""
         response = await self._client.get("/subscriptions")
         response.raise_for_status()
         data = response.json()
-        subscriptions = data.get("subscriptions") if isinstance(data, dict) else None
-        return subscriptions or []
+        return (data.get("subscriptions") if isinstance(data, dict) else None) or []
 
     async def delete_subscription(self, url: str) -> dict:
-        """Remove a webhook subscription by its URL."""
         response = await self._client.delete("/subscriptions", params={"url": url})
         response.raise_for_status()
-        data = response.json()
-        if isinstance(data, dict) and data.get("success") is False:
-            logger.warning("MAX failed to delete subscription %s: %s", url, data)
-        return data
+        return response.json()
 
     async def ensure_webhook(self, url: str, secret: str | None = None) -> dict:
-        """Recreate the webhook subscription so URL/secret/update_types always match config."""
-        subscriptions = await self.get_subscriptions()
-        for subscription in subscriptions:
-            old_url = subscription.get("url") if isinstance(subscription, dict) else None
-            if not old_url:
-                logger.warning("Skipping subscription without url: %s", subscription)
-                continue
-            logger.info("Removing existing webhook subscription %s", old_url)
-            await self.delete_subscription(old_url)
-
-        result = await self.set_webhook(url, secret)
-        logger.info("Webhook subscription created: %s", result)
-        return result
+        for sub in await self.get_subscriptions():
+            if isinstance(sub, dict) and (old_url := sub.get("url")):
+                await self.delete_subscription(old_url)
+        return await self.set_webhook(url, secret)
 
     async def aclose(self) -> None:
         await self._client.aclose()
