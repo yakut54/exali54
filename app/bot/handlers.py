@@ -92,7 +92,7 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
         )
         await _render_screen(chat_id, mid, text, tax_modes_keyboard(user["tax_mode"]), max_client)
     elif data.startswith("tax:"):
-        tax_mode = data.split(":", 1)
+        tax_mode = data.split(":", 1)[1]
         try:
             await set_user_tax_mode(user_id, tax_mode)
         except ValueError:
