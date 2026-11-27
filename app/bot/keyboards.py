@@ -9,26 +9,32 @@ TAX_SHORT_NAMES: dict[str, str] = {
 
 def main_menu_keyboard() -> list[list[dict]]:
     return [
-        [{"type": "callback", "text": "🧮 Стоп-цена (Маржа)", "payload": "screen:calc"}],
+        [{"type": "callback", "text": "🧮 Стоп-цена (Маржа)", "payload": "screen:calc", "intent": "positive"}],
         [
-            {"type": "callback", "text": "🛡 ИНН", "payload": "screen:inn"},
-            {"type": "callback", "text": "📄 ТТН", "payload": "screen:ttn"},
+            {"type": "callback", "text": "🛡 ИНН", "payload": "screen:inn", "intent": "default"},
+            {"type": "callback", "text": "📄 ТТН", "payload": "screen:ttn", "intent": "default"},
         ],
-        [{"type": "callback", "text": "⚙️ Налоговый режим", "payload": "screen:tax"}],
+        [{"type": "callback", "text": "⚙️ Налоговый режим", "payload": "screen:tax", "intent": "default"}],
     ]
 
 
 def tax_modes_keyboard(current_mode: str) -> list[list[dict]]:
     def btn(code: str) -> dict:
-        mark = "✅ " if code == current_mode else ""
-        return {"type": "callback", "text": f"{mark}{TAX_SHORT_NAMES[code]}", "payload": f"tax:{code}"}
+        is_active = code == current_mode
+        mark = "✅ " if is_active else ""
+        return {
+            "type": "callback",
+            "text": f"{mark}{TAX_SHORT_NAMES[code]}",
+            "payload": f"tax:{code}",
+            "intent": "positive" if is_active else "default",
+        }
 
     return [
         [btn("osno_22"), btn("usn_5_nds")],
         [btn("usn_6"), btn("usn_6_agent")],
-        [btn("usn_15"), {"type": "callback", "text": "← Назад", "payload": "screen:home"}],
+        [btn("usn_15"), {"type": "callback", "text": "← Назад", "payload": "screen:home", "intent": "default"}],
     ]
 
 
 def back_to_home_keyboard() -> list[list[dict]]:
-    return [[{"type": "callback", "text": "← В меню", "payload": "screen:home"}]]
+    return [[{"type": "callback", "text": "← В меню", "payload": "screen:home", "intent": "default"}]]
