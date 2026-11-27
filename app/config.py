@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "botdb"
     DATABASE_URL: str = "postgresql://botuser:botpassword@db:5432/botdb"
 
+    MAX_API_URL: str = "https://platform-api2.max.ru"
     MAX_BOT_TOKEN: str = ""
     DEEPSEEK_API_KEY: str = ""
 
