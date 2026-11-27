@@ -50,17 +50,19 @@ class MaxClient:
         notification: str | None = None,
     ) -> dict:
         """Acknowledge an inline button click in MAX."""
-        body: dict = {}
-        if notification:
-            body["notification"] = notification
+        if not notification:
+            return {}
 
         response = await self._client.post(
             "/answers",
             params={"callback_id": callback_id},
-            json=body,
+            json={"notification": notification},
         )
-        response.raise_for_status()
+        if response.is_error:
+            logger.warning("MAX /answers failed (%s): %s", response.status_code, response.text)
+            return {}
         return response.json()
+
 
     async def set_webhook(self, url: str, secret: str | None = None) -> dict:
         """Subscribe the bot to webhook updates at the given URL."""

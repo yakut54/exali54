@@ -28,16 +28,17 @@ def _extract_chat_id(payload: dict) -> int | None:
 
 
 def _extract_user_id(payload: dict) -> int | None:
+    if isinstance(cb := payload.get("callback"), dict) and isinstance(usr := cb.get("user"), dict):
+        if (uid := _as_int(usr.get("user_id"))) is not None:
+            return uid
     for key in ("user", "sender"):
         if isinstance(obj := payload.get(key), dict) and (uid := _as_int(obj.get("user_id"))) is not None:
             return uid
     if isinstance(msg := payload.get("message"), dict) and isinstance(snd := msg.get("sender"), dict):
         if (uid := _as_int(snd.get("user_id"))) is not None:
             return uid
-    if isinstance(cb := payload.get("callback"), dict) and isinstance(usr := cb.get("user"), dict):
-        if (uid := _as_int(usr.get("user_id"))) is not None:
-            return uid
     return _extract_chat_id(payload)
+
 
 
 def _extract_text(payload: dict) -> str:
