@@ -1,5 +1,6 @@
 import asyncio
 import logging
+
 from bot.client import MaxClient
 from bot.keyboards import back_to_home_keyboard, main_menu_keyboard, tax_modes_keyboard
 from services.users import TAX_LABELS, get_or_create_user, set_user_tax_mode
@@ -82,9 +83,8 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
     if not isinstance(data, str):
         return
 
-    # Гасим крутилку на кнопке мгновенно, не дожидаясь запросов в БД
     if cb_id:
-        toast = f"✅ {TAX_LABELS.get(data.split(':', 1), '')}" if data.startswith("tax:") else "⏳"
+        toast = f"✅ {TAX_LABELS.get(data.removeprefix('tax:'), '')}" if data.startswith("tax:") else "⏳"
         asyncio.create_task(max_client.answer_callback(cb_id, notification=toast))
 
     user = await get_or_create_user(user_id)
@@ -95,7 +95,7 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
         text = f"**⚙️ Система налогообложения**\nСейчас: **{TAX_LABELS.get(user['tax_mode'], user['tax_mode'])}**"
         await _render_screen(chat_id, mid, text, tax_modes_keyboard(user["tax_mode"]), max_client)
     elif data.startswith("tax:"):
-        tax_mode = data.split(":", 1)
+        tax_mode = data.removeprefix("tax:")
         try:
             await set_user_tax_mode(user_id, tax_mode)
         except ValueError:
