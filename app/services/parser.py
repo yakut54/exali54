@@ -103,14 +103,15 @@ async def parse_order_text(text: str) -> ParsedOrder | None:
     if weight_t is not None and weight_t <= 0:
         weight_t = None
 
-    rate_type = data.get("rate_type") if data.get("rate_type") in ("total", "per_ton", "per_km") else "total"
+    c_type = data.get("client_rate_type") if data.get("client_rate_type") in ("total", "per_ton", "per_km") else "total"
+    p_type = data.get("carrier_rate_type") if data.get("carrier_rate_type") in ("total", "per_ton", "per_km") else "total"
 
-    client_rate = _normalize_rate(_to_decimal(data.get("client_rate_raw")), rate_type, weight_t, warnings)
+    client_rate = _normalize_rate(_to_decimal(data.get("client_rate_raw")), c_type, weight_t, warnings)
     if client_rate is None:
         return None
 
-    client_alt_rate = _normalize_rate(_to_decimal(data.get("client_alt_rate_raw")), rate_type, weight_t, warnings)
-    carrier_rate = _normalize_rate(_to_decimal(data.get("carrier_rate_raw")), rate_type, weight_t, warnings)
+    client_alt_rate = _normalize_rate(_to_decimal(data.get("client_alt_rate_raw")), c_type, weight_t, warnings)
+    carrier_rate = _normalize_rate(_to_decimal(data.get("carrier_rate_raw")), p_type, weight_t, warnings)
 
     deadhead_km = _to_decimal(data.get("deadhead_km"))
     if deadhead_km is not None and deadhead_km < 0:
