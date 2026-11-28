@@ -1,5 +1,7 @@
 import asyncio
+import hashlib
 import hmac
+import json
 import logging
 from contextlib import asynccontextmanager, suppress
 
@@ -9,7 +11,7 @@ from fastapi.responses import JSONResponse
 from bot.transport.client import WEBHOOK_URL, MaxClient
 from bot.handlers import handle_update
 from config import settings
-from db import close_db_pool, init_db_pool
+from db import claim_update, close_db_pool, init_db_pool
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,6 +27,18 @@ async def _process_update(payload: dict) -> None:
         await handle_update(payload, max_client)
     except Exception:
         logger.exception("Failed to handle update: %s", payload)
+
+
+def _update_key(payload: dict) -> str:
+    callback = payload.get("callback")
+    if isinstance(callback, dict) and callback.get("callback_id"):
+        return f"callback:{callback['callback_id']}"
+    message = payload.get("message")
+    body = message.get("body") if isinstance(message, dict) else None
+    if isinstance(body, dict) and body.get("mid"):
+        return f"message:{body['mid']}"
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return f"payload:{hashlib.sha256(raw.encode()).hexdigest()}"
 
 
 async def _register_webhook_forever() -> None:
@@ -96,7 +110,11 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
         logger.warning("Webhook body is not a JSON object: %r", payload)
         raise HTTPException(status_code=400, detail="invalid payload")
 
-    logger.info("Webhook received: %s", payload)
+    update_key = _update_key(payload)
+    if not await claim_update(update_key):
+        logger.info("Duplicate webhook ignored: %s", update_key)
+        return {"ok": True, "duplicate": True}
+    logger.info("Webhook received: %s", update_key)
     # Reply to MAX immediately; message processing happens after the response.
     background_tasks.add_task(_process_update, payload)
     return {"ok": True}

@@ -100,6 +100,11 @@ CREATE TABLE IF NOT EXISTS parse_failures (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS processed_updates (
+    update_key VARCHAR(128) PRIMARY KEY,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS route_cache (
     route_key VARCHAR(256) PRIMARY KEY,
     distance_km INT NOT NULL,
@@ -129,3 +134,18 @@ def get_db_pool() -> asyncpg.Pool:
     if _pool is None:
         raise RuntimeError("Database pool is not initialized")
     return _pool
+
+
+async def claim_update(update_key: str) -> bool:
+    """Atomically claim a webhook update; False means it was already handled."""
+    async with get_db_pool().acquire() as conn:
+        inserted = await conn.fetchval(
+            """
+            INSERT INTO processed_updates (update_key)
+            VALUES ($1)
+            ON CONFLICT (update_key) DO NOTHING
+            RETURNING update_key
+            """,
+            update_key,
+        )
+    return inserted is not None
