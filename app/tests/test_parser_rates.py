@@ -2,6 +2,7 @@ import unittest
 from decimal import Decimal
 
 from services.parser import _normalize_rate, _rate_hint
+from services.cities_dict import has_known_cities, normalize_city_name
 
 
 class RateHintTests(unittest.TestCase):
@@ -27,6 +28,11 @@ class RateHintTests(unittest.TestCase):
         self.assertIsNone(_rate_hint("тайшет айхал 20т"))
         self.assertIsNone(_rate_hint("тайшет айхал 20/82"))
         self.assertIsNone(_rate_hint("тайшет айхал 27.11"))
+
+    def test_city_normalization(self):
+        self.assertEqual(normalize_city_name("улан уде"), "Улан-Удэ")
+        self.assertEqual(normalize_city_name("мхч"), "Махачкала")
+        self.assertTrue(has_known_cities("тайшет айхал"))
 
 
 if __name__ == "__main__":

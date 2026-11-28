@@ -166,6 +166,8 @@ async def parse_order_text(text: str, in_dist_mode: bool = False) -> ParsedOrder
     if fallback_route:
         from_city = from_city or fallback_route[0]
         to_city = to_city or fallback_route[1]
+    from_city = normalize_city_name(from_city) if from_city else None
+    to_city = normalize_city_name(to_city) if to_city else None
     distance = await get_road_distance_km(from_city, to_city) if from_city and to_city else None
     distance_km = distance[0] if distance else None
     c_type = data.get("client_rate_type") if data.get("client_rate_type") in ("total", "per_ton", "per_km") else "total"
