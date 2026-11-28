@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 import httpx
 from config import settings
-from services.cities_dict import CITY_ALIASES, has_known_cities
+from services.cities_dict import CITY_ALIASES, CITY_NORM_MAP, has_known_cities, normalize_city_name
 from services.distance import get_road_distance_km
 logger = logging.getLogger("max-bot.parser")
 _PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "order_parser.txt"
@@ -46,6 +46,23 @@ def _looks_like_order(text: str, in_dist_mode: bool = False) -> bool:
     return (bool(numbers) or has_known_cities(text) or bool(cities_only) or short_route or
             (phrase_route and not re.search(r"\b(и|или|от|до|на|из|в)\b", text.lower())) or
             bool(re.search(r"\b(км|километр|расстояни|пробег)\b", text.lower())))
+
+
+def _short_known_route(text: str) -> tuple[str, str] | None:
+    words = text.strip().split()
+    if len(words) < 2 or len(words) > 6:
+        return None
+    for split in range(1, len(words)):
+        left, right = " ".join(words[:split]), " ".join(words[split:])
+        keys = [
+            " ".join(value.lower().replace("ё", "е").replace("-", " ").split())
+            for value in (left, right)
+        ]
+        if all(key in CITY_ALIASES or key in CITY_NORM_MAP for key in keys):
+            return normalize_city_name(left), normalize_city_name(right)
+    return None
+
+
 def _to_decimal(val) -> Decimal | None:
     if val is None or isinstance(val, bool):
         return None
@@ -74,7 +91,18 @@ def _normalize_rate(raw: Decimal | None, rate_type: str, weight_t: Decimal | Non
     short_total = rate_type == "total" and Decimal("15") <= raw < Decimal("2000") and not re.search(r"(?:км|р\s*/\s*км|за\s+км)", text.lower())
     return raw * Decimal("1000") if short_total or raw < Decimal("1000") else raw
 async def parse_order_text(text: str, in_dist_mode: bool = False) -> ParsedOrder | None:
-    if not _looks_like_order(text, in_dist_mode) or not settings.DEEPSEEK_API_KEY:
+    if not _looks_like_order(text, in_dist_mode):
+        return None
+    if not re.search(r"\d", text):
+        route = _short_known_route(text)
+        if route:
+            distance = await get_road_distance_km(*route)
+            return ParsedOrder(
+                from_city=route[0], to_city=route[1], weight_t=None,
+                client_rate=None, client_vat=None,
+                distance_km=distance[0] if distance else None,
+            )
+    if not settings.DEEPSEEK_API_KEY:
         return None
     headers = {"Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}"}
     body = {
