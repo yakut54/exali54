@@ -10,14 +10,12 @@ TAX_SHORT_NAMES: dict[str, str] = {
 def main_menu_keyboard() -> list[list[dict]]:
     return [
         [{"type": "callback", "text": "🧮 Стоп-цена (Маржа)", "payload": "screen:calc", "intent": "positive"}],
+        [{"type": "callback", "text": "🛣 Расстояние и ₽/км", "payload": "screen:dist", "intent": "default"}],
         [
-            {"type": "callback", "text": "🛣 Расстояние и ₽/км", "payload": "screen:dist", "intent": "default"},
             {"type": "callback", "text": "🛡 ИНН", "payload": "screen:inn", "intent": "default"},
-        ],
-        [
             {"type": "callback", "text": "📄 ТТН", "payload": "screen:ttn", "intent": "default"},
-            {"type": "callback", "text": "⚙️ Налоговый режим", "payload": "screen:tax", "intent": "default"},
         ],
+        [{"type": "callback", "text": "⚙️ Налоговый режим", "payload": "screen:tax", "intent": "default"}],
     ]
 
 
