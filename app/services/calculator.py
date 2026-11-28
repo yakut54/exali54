@@ -25,6 +25,9 @@ def rate_breakdown_by_vat(amount: Decimal, is_vat_included: bool, distance_km: i
     return result
 
 
+def _usn_vat(client_rate: Decimal, client_vat: bool, note: str) -> tuple[Decimal, str | None]:
+    return (client_rate * Decimal("22") / VAT_DIVISOR, note) if client_vat else (Decimal("0"), None)
+
 @dataclass(frozen=True)
 class CalcResult:
     tax_mode: str
@@ -84,20 +87,17 @@ def calculate_margin(
         stop_price = target_rev_net * USN_VAT_5_DIVISOR / Decimal("100")
 
     elif tax_mode == "usn_6":
-        if client_vat:
-            warning = "Вы на УСН 6% без НДС, а клиент платит с НДС — проверьте условия."
+        vat_to_pay, warning = _usn_vat(client_rate, client_vat, "УСН 6%: выделенный НДС 22% уплачивается в бюджет без вычета входящего НДС.")
         income_tax = client_rate * USN_6_RATE
         stop_price = carrier_rate / (Decimal("1") - USN_6_RATE)
 
     elif tax_mode == "usn_6_agent":
-        if client_vat:
-            warning = "Агентский УСН 6%: налог взят только с разницы (клиент − перевозчик)."
+        vat_to_pay, warning = _usn_vat(client_rate, client_vat, "Агентский УСН: выделенный НДС 22% уплачивается в бюджет без вычета входящего НДС.")
         income_tax = max(Decimal("0"), client_rate - carrier_rate) * USN_6_RATE
         stop_price = carrier_rate
 
     elif tax_mode == "usn_15":
-        if client_vat:
-            warning = "Вы на УСН 15% без НДС, а клиент платит с НДС — проверьте условия."
+        vat_to_pay, warning = _usn_vat(client_rate, client_vat, "УСН 15%: выделенный НДС 22% уплачивается в бюджет без вычета входящего НДС.")
         tax_15 = max(Decimal("0"), client_rate - carrier_rate) * USN_15_RATE
         tax_min = client_rate * USN_MIN_TAX_RATE
         income_tax = max(tax_15, tax_min)

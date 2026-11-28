@@ -33,10 +33,12 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
 
     if data == "screen:home_new":
         await send_home_screen(chat_id, user_id, mid, old_text, tax, max_client)
-    elif data in ("screen:home", "screen:calc", "screen:dist"):
+    elif data in ("screen:home", "screen:calc"):
         await clear_user_state(user_id)
-        kb = main_menu_keyboard() if data == "screen:home" else back_to_home_keyboard()
-        await edit_or_send(chat_id, user_id, mid, screen_text(data.removeprefix("screen:"), tax), kb, max_client)
+        await edit_or_send(chat_id, user_id, mid, screen_text(data.removeprefix("screen:"), tax), main_menu_keyboard() if data == "screen:home" else back_to_home_keyboard(), max_client)
+    elif data == "screen:dist":
+        await set_user_state(user_id, "wait_dist")
+        await edit_or_send(chat_id, user_id, mid, screen_text("dist", tax), back_to_home_keyboard(), max_client)
     elif data == "screen:tax":
         await edit_or_send(chat_id, user_id, mid, screen_text("tax", tax), tax_modes_keyboard(tax), max_client)
     elif data.startswith("tax:"):
@@ -105,14 +107,17 @@ async def handle_update(payload: dict, max_client: MaxClient) -> None:
             await clear_user_state(uid)
             free_beta = await is_free_beta_mode()
             await send_fresh_menu(cid, uid, await run_broadcast(raw_text, max_client), admin_keyboard(free_beta), max_client)
+        elif st.get("state") == "wait_dist" and raw_text:
+            reply_text, kb = await build_calc_reply(uid, raw_text, tax, in_dist_mode=True)
+            await send_fresh_menu(cid, uid, reply_text, kb, max_client)
         elif raw_text:
             if st.get("state") == "wait_inn" and is_order_text(raw_text):
                 await clear_user_state(uid)
-                reply_text, kb = await build_calc_reply(uid, raw_text, tax)
+                reply_text, kb = await build_calc_reply(uid, raw_text, tax, in_dist_mode=st.get("state") == "wait_dist")
             elif st.get("state") == "wait_inn" or is_inn_text(raw_text):
                 if st.get("state") == "wait_inn":
                     await clear_user_state(uid)
                 reply_text, kb = await build_inn_reply(uid, raw_text)
             else:
-                reply_text, kb = await build_calc_reply(uid, raw_text, tax)
+                reply_text, kb = await build_calc_reply(uid, raw_text, tax, in_dist_mode=st.get("state") == "wait_dist")
             await send_fresh_menu(cid, uid, reply_text, kb, max_client)

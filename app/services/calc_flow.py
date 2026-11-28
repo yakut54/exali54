@@ -18,7 +18,9 @@ from services.parser import parse_order_text
 from services.users import is_calc_limit_exceeded, log_parse_failure
 
 
-async def build_calc_reply(user_id: int, raw_text: str, tax_mode: str) -> tuple[str, list[list[dict]]]:
+async def build_calc_reply(
+    user_id: int, raw_text: str, tax_mode: str, in_dist_mode: bool = False
+) -> tuple[str, list[list[dict]]]:
     """Вернуть (текст_ответа, клавиатура) для расчёта рейса."""
     state_row = await get_user_state(user_id)
     carrier_step = bool(state_row and state_row["state"] == "wait_carrier_rate" and state_row["order_id"])
@@ -43,6 +45,8 @@ async def build_calc_reply(user_id: int, raw_text: str, tax_mode: str) -> tuple[
 
     parsed = await parse_order_text(raw_text)
     if parsed is None:
+        if in_dist_mode:
+            return "🤔 Укажи два города (например: спб мск или Уссурийск Москва 750 тыс нал)", keep_result_menu_keyboard()
         await log_parse_failure(user_id, raw_text)
         return (
             "🤔 Не вижу ставок в сообщении.\n"
@@ -51,23 +55,23 @@ async def build_calc_reply(user_id: int, raw_text: str, tax_mode: str) -> tuple[
         )
 
     dist = await get_road_distance_km(parsed.from_city, parsed.to_city)
-    if parsed.client_rate is None and parsed.from_city and parsed.to_city:
-        if dist:
-            return (
-                f"📍 **{parsed.from_city} → {parsed.to_city}**\n"
-                f"🛣 Расстояние по автодорогам: **{'~' if dist[1] else ''}{dist[0]} км**",
-                keep_result_menu_keyboard(),
-            )
-        return (
-            f"⚠️ Не удалось определить расстояние между **{parsed.from_city}** и **{parsed.to_city}**.",
-            keep_result_menu_keyboard(),
-        )
+    if in_dist_mode and not (parsed.from_city and parsed.to_city):
+        return "🤔 Укажи два города (например: спб мск или Уссурийск Москва 750 тыс нал)", keep_result_menu_keyboard()
+    if parsed.client_rate is None:
+        if in_dist_mode and parsed.from_city and parsed.to_city:
+            text = (f"📍 {parsed.from_city} → {parsed.to_city}\n"
+                    f"🛣 Расстояние по автодорогам: **{'~' if dist[1] else ''}{dist[0]} км**") if dist else f"⚠️ Не удалось определить расстояние между **{parsed.from_city}** и **{parsed.to_city}**."
+            return text, keep_result_menu_keyboard()
+        if in_dist_mode:
+            return "🤔 Укажи два города (например: спб мск или Уссурийск Москва 750 тыс нал)", keep_result_menu_keyboard()
+        await log_parse_failure(user_id, raw_text)
+        return "🤔 Не вижу ставки в сообщении.", keep_result_menu_keyboard()
     client_rate, client_vat, fork_note = pick_client_offer(parsed, tax_mode)
     if parsed.client_rate_type == "per_km" and dist and parsed.distance_km is None:
         client_rate *= dist[0]
-    if parsed.calc_mode == "rate_per_km" and parsed.carrier_rate is None:
+    if (in_dist_mode or parsed.calc_mode == "rate_per_km") and (in_dist_mode or parsed.carrier_rate is None):
         breakdown = rate_breakdown_by_vat(client_rate, bool(client_vat), dist[0] if dist else None)
-        distance = f"📍 **{parsed.from_city} → {parsed.to_city}** · {'~' if dist and dist[1] else ''}{dist[0]} км" if dist else "⚠️ Расстояние не удалось определить, ₽/км не рассчитан."
+        distance = f"📍 {parsed.from_city} → {parsed.to_city} · {'~' if dist and dist[1] else ''}{dist[0]} км" if dist else "⚠️ Расстояние не удалось определить, ₽/км не рассчитан."
         per_km = dist is not None
         return (
             f"{distance}\n"

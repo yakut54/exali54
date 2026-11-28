@@ -7,10 +7,17 @@ from db import get_db_pool
 
 GEOCODE_URL = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/suggest/address"
 OSRM_URL = "https://router.project-osrm.org/route/v1/driving"
+CITY_ALIASES = {
+    "мск": "Москва", "спб": "Санкт-Петербург", "нск": "Новосибирск",
+    "екб": "Екатеринбург", "кзн": "Казань", "крд": "Краснодар",
+    "рнд": "Ростов-на-Дону", "нн": "Нижний Новгород", "члб": "Челябинск",
+    "крск": "Красноярск",
+}
 
 
 def _clean(value: str | None) -> str:
-    return " ".join((value or "").lower().split())
+    value = " ".join((value or "").lower().split())
+    return CITY_ALIASES.get(value, value)
 
 
 async def _cached(keys: tuple[str, str]) -> tuple[int, bool] | None:
