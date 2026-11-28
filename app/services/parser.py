@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
 import httpx
@@ -10,21 +10,36 @@ from config import settings
 
 logger = logging.getLogger("max-bot.parser")
 
+DEEPSEEK_API_URL = "https://api.proxyapi.ru/v1/chat/completions"
+
 SYSTEM_PROMPT = (
-    "Ты парсер заявок автомобильной грузоперевозки в РФ. Верни строго JSON без markdown-обёрток и комментариев со схемой: "
-    '{"from_city": str|null, "to_city": str|null, "weight_t": number|null, "client_rate_raw": number|null, '
-    '"client_vat": bool|null, "carrier_rate_raw": number|null, "carrier_vat": bool|null, "deadhead_km": number|null}. '
-    "Правила: "
-    "1) Названия городов и коды регионов РФ приводи к полному имени города "
-    "(нск, новосиб, 54 -> Новосибирск; 55 -> Омск; екб, 66 -> Екатеринбург; челяба, 74 -> Челябинск; "
-    "мск, 77 -> Москва; спб, питер, 78 -> Санкт-Петербург; крск, 24 -> Красноярск; ирк, 38 -> Иркутск; "
-    "тюмень, 72 -> Тюмень; барнаул, 22 -> Барнаул; кемерово, 42 -> Кемерово; томск, 70 -> Томск; крд, 23 -> Краснодар). "
-    "2) Вес: слова двадцатка, фура -> 20; десятитонник -> 10; пятитонник -> 5. "
-    "3) Разделение ставок: первая ставка в паре (до слэша /, тире, слов на / отдаю / перевоз / выход) всегда client_rate_raw "
-    "(ставка от заказчика). Вторая ставка (после /, на, отдаю, перевоз, выход, водителю) всегда carrier_rate_raw (ставка перевозчику). "
-    "4) Не умножай числа и не считай налоги: пиши число ровно как в тексте (если 140 — пиши 140, если 140000 — пиши 140000). "
-    "5) НДС: с ндс, ндс, с эндээс, осно -> true; без ндс, б/н без ндс, ип, усн, нал, на карту -> false; если не указано -> null. "
-    "6) Подача, холостой, подгон, пустой пробег -> deadhead_km (в км)."
+    "Ты строгий парсер заявок автомобильной грузоперевозок в РФ. Верни ТОЛЬКО валидный JSON без markdown и пояснений:\n"
+    '{"from_city": str|null, "to_city": str|null, "weight_t": number|null, "rate_type": "total"|"per_ton"|"per_km", '
+    '"client_rate_raw": number|null, "client_vat": bool|null, "carrier_rate_raw": number|null, "carrier_vat": bool|null, '
+    '"deadhead_km": number|null, "warnings": list[str]}\n'
+    "Правила извлечения:\n"
+    "1) МАРШРУТ: Города и коды регионов приводи к полному названию (нск, новосиб, 54 -> Новосибирск; 55 -> Омск; "
+    "екб, 66 -> Екатеринбург; челяба, 74 -> Челябинск; мск, 77 -> Москва; спб, питер, 78 -> Санкт-Петербург; "
+    "крск, 24 -> Красноярск; ирк, 38 -> Иркутск; тюмень, 72 -> Тюмень; барнаул, 22 -> Барнаул; "
+    "кемерово, 42 -> Кемерово; томск, 70 -> Томск; крд, 23 -> Краснодар; рнд, 61 -> Ростов-на-Дону; "
+    "кзн, 16 -> Казань; нн, нижний, 52 -> Нижний Новгород; самара, 63 -> Самара; уфа, 02 -> Уфа; "
+    "пермь, 59 -> Пермь; врн, 36 -> Воронеж; влг, 34 -> Волгоград; хбк, 27 -> Хабаровск; влд, 25 -> Владивосток). "
+    "Складские зоны в скобках отбрасывай (МСК (Шушары) -> Москва). При кругорейсе (А - Б - А) to_city = Б.\n"
+    "2) ВЕС (weight_t, в тоннах): фура, двадцатка, 20т, реф, тент, борт, шаланда -> 20; десятитонник, 10т -> 10; "
+    "пятитонник, 5т -> 5; трехтонник, 3т -> 3; газель, полуторка -> 1.5. Кг переводи в тонны (500 кг -> 0.5). "
+    "ИГНОРИРУЙ габариты кузова (13.6м, 82м3, 86 куб, 92, 120 куб), даты (28.11) и телефоны.\n"
+    "3) СТАВКИ И ТИП: Если цена за тонну (р/т, за тонну) -> rate_type='per_ton'; за км (р/км) -> 'per_km'; иначе -> 'total'. "
+    "Маркеры заказчика (client_rate_raw): вход, заказчик, дают, платит, нам, ставка. "
+    "Маркеры перевозчика (carrier_rate_raw): выход, отдаю, отдам, перевоз, водителю, на руки. "
+    "Если маркеров нет и даны 2 числа через /, -, на (140/100): первое = client_rate_raw, второе = carrier_rate_raw. "
+    "ВАЖНО: если даны две ставки для ОДНОЙ стороны с разным НДС (например: 'заказчик 140 с ндс / 125 без ндс'), "
+    "бери первый вариант в client_rate_raw, carrier_rate_raw = null, а в warnings добавь 'Указана вилка ставок по НДС'. "
+    "Если оплата перевозчику разбита на части ('70 б/н + 30 на карту') -> суммируй (100), carrier_vat = false, в warnings напиши 'Комбинированная оплата'.\n"
+    "4) ЧИСЛА: Убирай 'к', 'тыс', 'тр', 'руб', 'р', запятую меняй на точку, НЕ умножай на 1000 (140,5к -> 140.5; 140000 -> 140000). Налоги сам не считай.\n"
+    "5) НДС: с ндс, ндс, +ндс, эндээс, осно -> true; без ндс, б/н без ндс, ип, усн, нал, на карту -> false; не указано -> null. "
+    "Если НДС указан один раз в конце пары ('140 / 100 с ндс'), примени к обеим ставкам.\n"
+    "6) ПОДАЧА (deadhead_km): Только километры ('подача 40', 'холостой 40км', 'подгон 40' -> 40). "
+    "Если подача в рублях ('подача 5к') -> deadhead_km = null, в warnings добавь 'Подача указана в рублях'."
 )
 
 
@@ -38,6 +53,7 @@ class ParsedOrder:
     carrier_rate: Decimal
     carrier_vat: bool | None
     deadhead_km: Decimal | None
+    warnings: list[str] = field(default_factory=list)
 
 
 def _looks_like_order(text: str) -> bool:
@@ -54,8 +70,21 @@ def _to_decimal(val) -> Decimal | None:
         return None
 
 
-def _normalize_rate(raw: Decimal | None) -> Decimal | None:
+def _normalize_rate(
+    raw: Decimal | None,
+    rate_type: str,
+    weight_t: Decimal | None,
+    warnings: list[str],
+) -> Decimal | None:
     if raw is None or raw <= 0:
+        return None
+    if rate_type == "per_ton":
+        if weight_t and weight_t > 0:
+            return raw * weight_t
+        warnings.append("Цена указана за тонну, но вес не найден")
+        return None
+    if rate_type == "per_km":
+        warnings.append("Ставка за км — требуется общий пробег")
         return None
     return raw * Decimal("1000") if raw < Decimal("1000") else raw
 
@@ -64,7 +93,6 @@ async def parse_order_text(text: str) -> ParsedOrder | None:
     if not _looks_like_order(text) or not settings.DEEPSEEK_API_KEY:
         return None
 
-    base_url = settings.DEEPSEEK_BASE_URL.rstrip("/")
     headers = {"Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}"}
     body = {
         "model": "deepseek/deepseek-chat",
@@ -78,25 +106,30 @@ async def parse_order_text(text: str) -> ParsedOrder | None:
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(f"{base_url}/chat/completions", headers=headers, json=body)
+            resp = await client.post(DEEPSEEK_API_URL, headers=headers, json=body)
             resp.raise_for_status()
             choices = resp.json().get("choices") or []
             if not choices:
                 return None
-            content = choices.get("message", {}).get("content", "")
+            content = choices[0].get("message", {}).get("content", "")
             data = json.loads(content)
     except Exception as exc:
         logger.warning("Failed to parse order via LLM: %s", exc)
         return None
 
-    client_rate = _normalize_rate(_to_decimal(data.get("client_rate_raw")))
-    carrier_rate = _normalize_rate(_to_decimal(data.get("carrier_rate_raw")))
-    if client_rate is None or carrier_rate is None:
-        return None
+    raw_warnings = data.get("warnings")
+    warnings = [str(w) for w in raw_warnings if w] if isinstance(raw_warnings, list) else []
 
     weight_t = _to_decimal(data.get("weight_t"))
     if weight_t is not None and weight_t <= 0:
         weight_t = None
+
+    rate_type = data.get("rate_type") if data.get("rate_type") in ("total", "per_ton", "per_km") else "total"
+
+    client_rate = _normalize_rate(_to_decimal(data.get("client_rate_raw")), rate_type, weight_t, warnings)
+    carrier_rate = _normalize_rate(_to_decimal(data.get("carrier_rate_raw")), rate_type, weight_t, warnings)
+    if client_rate is None or carrier_rate is None:
+        return None
 
     deadhead_km = _to_decimal(data.get("deadhead_km"))
     if deadhead_km is not None and deadhead_km < 0:
@@ -114,4 +147,5 @@ async def parse_order_text(text: str) -> ParsedOrder | None:
         carrier_rate=carrier_rate,
         carrier_vat=p_vat,
         deadhead_km=deadhead_km,
+        warnings=warnings,
     )
