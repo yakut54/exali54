@@ -76,9 +76,10 @@ async def create_order(
             """
             INSERT INTO orders (
                 user_id, raw_text, route_from, route_to, cargo_info,
-                client_rate, client_vat, carrier_rate, carrier_vat, margin, status
+                weight_t, deadhead_km, client_rate, client_vat,
+                carrier_rate, carrier_vat, margin, status
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING id
             """,
             user_id,
@@ -86,6 +87,8 @@ async def create_order(
             parsed.from_city,
             parsed.to_city,
             cargo_info,
+            parsed.weight_t,
+            parsed.deadhead_km,
             client_rate,
             client_vat,
             parsed.carrier_rate,

@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS orders (
     cargo_date VARCHAR(64),
     cargo_info TEXT,
     body_type VARCHAR(64),
+    weight_t NUMERIC(10, 2),
+    deadhead_km NUMERIC(10, 2),
     client_rate NUMERIC(12, 2),
     client_vat BOOLEAN,
     carrier_rate NUMERIC(12, 2),
@@ -28,6 +30,9 @@ CREATE TABLE IF NOT EXISTS orders (
     status VARCHAR(32) NOT NULL DEFAULT 'draft',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS weight_t NUMERIC(10, 2);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS deadhead_km NUMERIC(10, 2);
 
 CREATE INDEX IF NOT EXISTS idx_orders_user_created
     ON orders(user_id, created_at DESC);

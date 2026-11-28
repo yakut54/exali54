@@ -73,10 +73,12 @@ async def build_calc_reply(user_id: int, raw_text: str, tax_mode: str) -> tuple[
             if order and order["client_rate"]:
                 c_rate = Decimal(str(order["client_rate"]))
                 c_vat = bool(order["client_vat"]) if order["client_vat"] is not None else (tax_mode in ("osno_22", "usn_5_nds"))
-                res = calculate_margin(tax_mode, c_rate, carrier_rate, client_vat=c_vat, carrier_vat=bool(carrier_vat))
+                w_t = Decimal(str(order["weight_t"])) if order.get("weight_t") is not None else None
+                d_km = Decimal(str(order["deadhead_km"])) if order.get("deadhead_km") is not None else None
+                res = calculate_margin(tax_mode, c_rate, carrier_rate, client_vat=c_vat, carrier_vat=bool(carrier_vat), weight_t=w_t, deadhead_km=d_km)
                 await complete_order_carrier(order["id"], carrier_rate, carrier_vat, res.net_profit)
                 await clear_user_state(user_id)
-                card = format_calc_card(order["route_from"], order["route_to"], None, res, order["client_vat"], carrier_vat, [])
+                card = format_calc_card(order["route_from"], order["route_to"], w_t, res, order["client_vat"], carrier_vat, [])
                 return card, keep_result_menu_keyboard()
         await clear_user_state(user_id)
 
