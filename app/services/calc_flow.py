@@ -29,10 +29,8 @@ def _vat_tag(vat: bool | None) -> str:
 
 
 def _max_carrier_breakeven(tax_mode: str, client_rate: Decimal, client_vat: bool) -> tuple[Decimal, Decimal | None]:
-    """Максимальная ставка перевозчика в ноль (без НДС, и с НДС для ОСНО)."""
     if tax_mode == "osno_22":
-        rev_net = client_rate * Decimal("100") / Decimal("122")
-        return rev_net, client_rate
+        return client_rate * Decimal("100") / Decimal("122"), client_rate
     if tax_mode == "usn_5_nds":
         rev_net = client_rate * Decimal("100") / Decimal("105")
         return rev_net * Decimal("0.94"), None
@@ -161,6 +159,11 @@ async def handle_calc_text(chat_id: int, user_id: int, raw_text: str, tax_mode: 
     if parsed.carrier_rate is None:
         order_id = await create_order(user_id, raw_text, parsed, client_rate, client_vat, status="draft")
         await set_user_state(user_id, "wait_carrier_rate", order_id=order_id)
+
+        if client_vat is False and tax_mode == "osno_22":
+            extra_notes.insert(0, "Вы на ОСНО: НДС 22% выделен из ставки клиента, уточните договор.")
+        elif client_vat is False and tax_mode == "usn_5_nds":
+            extra_notes.insert(0, "УСН + НДС 5%: в ставку клиента заложен НДС 5%.")
 
         max_no_vat, max_with_vat = _max_carrier_breakeven(tax_mode, client_rate, c_vat_effective)
         route = f"**📍 {parsed.from_city or 'Откуда'} → {parsed.to_city or 'Куда'}**"
