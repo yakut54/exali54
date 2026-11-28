@@ -1,5 +1,6 @@
 from dataclasses import replace
 from decimal import Decimal
+import logging
 from bot.ui.keyboards import calc_result_keyboard, keep_result_menu_keyboard
 from bot.ui.screens import fmt_money, format_calc_card, vat_tag
 from bot.step_cards import format_need_carrier_rate_card, format_need_client_rate_card
@@ -16,6 +17,7 @@ from services.orders import (
 )
 from services.parser import parse_order_text
 from services.users import is_calc_limit_exceeded, log_parse_failure
+logger = logging.getLogger("max-bot.calc")
 async def build_calc_reply(
     user_id: int, raw_text: str, tax_mode: str, in_dist_mode: bool = False
 ) -> tuple[str, list[list[dict]]]:
@@ -56,6 +58,11 @@ async def build_calc_reply(
             keep_result_menu_keyboard(),
         )
     dist = await get_road_distance_km(parsed.from_city, parsed.to_city)
+    logger.info(
+        "Parsed request: user=%s route=%s->%s client_rate=%s type=%s vat=%s distance=%s",
+        user_id, parsed.from_city, parsed.to_city, parsed.client_rate,
+        parsed.client_rate_type, parsed.client_vat, dist[0] if dist else None,
+    )
     if in_dist_mode and not (parsed.from_city and parsed.to_city):
         return "🤔 Укажи два города (например: спб мск или Уссурийск Москва 750 тыс нал)", keep_result_menu_keyboard()
     client_rate, client_vat, fork_note = pick_client_offer(parsed, tax_mode)
@@ -87,7 +94,14 @@ async def build_calc_reply(
     if client_rate is None:
         if in_dist_mode and parsed.from_city and parsed.to_city:
             text = (f"📍 {parsed.from_city} → {parsed.to_city}\n"
-                    f"🛣 Расстояние по автодорогам: **{'~' if dist[1] else ''}{dist[0]} км**") if dist else f"⚠️ Не удалось определить расстояние между **{parsed.from_city}** и **{parsed.to_city}**."
+                    f"🛣 Расстояние по автодорогам: **{'~' if dist[1] else ''}{dist[0]} км**\n\n"
+                    "⚠️ Ставку не удалось распознать.\n"
+                    "Напиши, например: `200`, `200 тыс`, `200 р/км` или `200 с НДС`."
+                    ) if dist else (
+                        f"⚠️ Не удалось определить расстояние между "
+                        f"**{parsed.from_city}** и **{parsed.to_city}**.\n\n"
+                        "Ставку можно указать так: `200`, `200 тыс` или `200 р/км`."
+                    )
             return text, keep_result_menu_keyboard()
         if in_dist_mode:
             return "🤔 Укажи два города (например: спб мск или Уссурийск Москва 750 тыс нал)", keep_result_menu_keyboard()
