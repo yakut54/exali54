@@ -13,7 +13,11 @@ async def set_user_state(user_id: int, state: str, order_id: int | None = None) 
             VALUES ($1, $2, $3)
             ON CONFLICT (user_id) DO UPDATE
                 SET state = EXCLUDED.state,
-                    order_id = EXCLUDED.order_id
+                    order_id = EXCLUDED.order_id,
+                    pending_photo_path = CASE
+                        WHEN EXCLUDED.state = 'wait_ttn_photo' THEN user_states.pending_photo_path
+                        ELSE NULL
+                    END
             """,
             user_id,
             state,
@@ -57,7 +61,16 @@ async def save_last_mid(user_id: int, mid: str | None, text: str | None = None) 
 async def set_pending_ttn_photo(user_id: int, path: str) -> None:
     pool = get_db_pool()
     async with pool.acquire() as conn:
-        await conn.execute("UPDATE user_states SET pending_photo_path = $1 WHERE user_id = $2", path, user_id)
+        await conn.execute(
+            """
+            INSERT INTO user_states (user_id, state, pending_photo_path)
+            VALUES ($1, 'wait_ttn_photo', $2)
+            ON CONFLICT (user_id) DO UPDATE
+                SET pending_photo_path = EXCLUDED.pending_photo_path
+            """,
+            user_id,
+            path,
+        )
 
 
 async def pop_pending_ttn_photo(user_id: int) -> str | None:
