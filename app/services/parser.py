@@ -14,7 +14,7 @@ logger = logging.getLogger("max-bot.parser")
 
 _PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "order_parser.txt"
 SYSTEM_PROMPT = _PROMPT_PATH.read_text(encoding="utf-8").strip()
-
+_CITY_ALIASES = {"спб", "мск", "нск", "омск", "екб", "кзн", "крд", "рнд", "нн", "члб", "крск"}
 
 @dataclass(frozen=True)
 class ParsedOrder:
@@ -34,14 +34,14 @@ class ParsedOrder:
     client_rate_type: str = "total"
     warnings: list[str] = field(default_factory=list)
 
-
 def _looks_like_order(text: str) -> bool:
     numbers = re.findall(r"\d+(?:[.,]\d+)?", text)
     if len(text) > 1500:
         return False
+    parts = text.lower().split()
     cities_only = re.fullmatch(r"[А-ЯЁ][а-яё-]+[ -]+[А-ЯЁ][а-яё-]+", text.strip())
-    return bool(numbers) or bool(cities_only) or bool(re.search(r"\b(км|километр|расстояни|пробег)\b", text.lower()))
-
+    short_route = len(parts) == 2 and all(part in _CITY_ALIASES for part in parts)
+    return bool(numbers) or bool(cities_only) or short_route or bool(re.search(r"\b(км|километр|расстояни|пробег)\b", text.lower()))
 
 def _to_decimal(val) -> Decimal | None:
     if val is None or isinstance(val, bool):
