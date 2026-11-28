@@ -107,6 +107,8 @@ async def handle_update(payload: dict, max_client: MaxClient) -> None:
             await clear_user_state(uid)
             free_beta = await is_free_beta_mode()
             await send_fresh_menu(cid, uid, await run_broadcast(raw_text, max_client), admin_keyboard(free_beta), max_client)
+        elif extract_image_urls(payload):
+            await send_fresh_menu(cid, uid, "📷 Я принимаю фотографии только в разделе **«📄 ТТН»** (по ссылке для водителя).\n\nЕсли на скриншоте заявка или ИНН — пришли их текстом, и я сразу посчитаю!", keep_result_menu_keyboard(), max_client)
         elif st.get("state") == "wait_dist" and raw_text:
             reply_text, kb = await build_calc_reply(uid, raw_text, tax, in_dist_mode=True)
             await send_fresh_menu(cid, uid, reply_text, kb, max_client)
@@ -121,3 +123,5 @@ async def handle_update(payload: dict, max_client: MaxClient) -> None:
             else:
                 reply_text, kb = await build_calc_reply(uid, raw_text, tax, in_dist_mode=st.get("state") == "wait_dist")
             await send_fresh_menu(cid, uid, reply_text, kb, max_client)
+        elif isinstance((body := (payload.get("message") or {}).get("body")), dict) and isinstance(body.get("attachments"), list) and body["attachments"]:
+            await send_fresh_menu(cid, uid, "🎙 Я пока не умею слушать голосовые и читать файлы/стикеры.\nНапиши маршрут, ставку или ИНН текстом — я сразу помогу!", keep_result_menu_keyboard(), max_client)
