@@ -76,12 +76,17 @@ async def set_pending_ttn_photo(user_id: int, path: str) -> None:
 async def pop_pending_ttn_photo(user_id: int) -> str | None:
     pool = get_db_pool()
     async with pool.acquire() as conn:
-        return await conn.fetchval(
-            "WITH old AS MATERIALIZED (SELECT pending_photo_path FROM user_states WHERE user_id = $1 FOR UPDATE) "
-            "UPDATE user_states SET pending_photo_path = NULL WHERE user_id = $1 "
-            "RETURNING (SELECT pending_photo_path FROM old)",
-            user_id,
-        )
+        async with conn.transaction():
+            path = await conn.fetchval(
+                "SELECT pending_photo_path FROM user_states WHERE user_id = $1 FOR UPDATE",
+                user_id,
+            )
+            if path:
+                await conn.execute(
+                    "UPDATE user_states SET pending_photo_path = NULL WHERE user_id = $1",
+                    user_id,
+                )
+            return path
 
 
 async def create_order(
