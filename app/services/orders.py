@@ -46,7 +46,12 @@ async def save_last_mid(user_id: int, mid: str | None, text: str | None = None) 
             VALUES ($1, 'idle', $2, $3)
             ON CONFLICT (user_id) DO UPDATE
                 SET last_mid = EXCLUDED.last_mid,
-                    last_text = EXCLUDED.last_text
+                    last_text = CASE
+                        WHEN user_states.state = 'wait_ttn_photo'
+                             AND user_states.last_text LIKE '%/pending_%'
+                        THEN user_states.last_text
+                        ELSE EXCLUDED.last_text
+                    END
             """,
             user_id,
             mid,

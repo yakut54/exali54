@@ -1,7 +1,7 @@
 import asyncio
 
 from bot.client import MaxClient
-from bot.keyboards import admin_keyboard, back_to_home_keyboard, keep_result_menu_keyboard, main_menu_keyboard, tax_modes_keyboard
+from bot.keyboards import admin_keyboard, back_to_home_keyboard, keep_result_menu_keyboard, main_menu_keyboard, tax_modes_keyboard, ttn_driver_keyboard
 from bot.screens import screen_text
 from bot.updates import edit_or_send, extract_chat_id, extract_image_urls, extract_msg_body, extract_start_payload, extract_user_id, send_fresh_menu, send_home_screen
 from config import settings
@@ -9,7 +9,7 @@ from services.admin import admin_callback, admin_panel_text, run_broadcast
 from services.calc_flow import build_calc_reply, start_recalc_carrier
 from services.inn_flow import build_inn_reply, is_inn_text, is_order_text
 from services.orders import clear_user_state, get_user_state, set_user_state
-from services.ttn_flow import finish_driver_ttn, handle_driver_photos, handle_driver_start, start_ttn_for_logist
+from services.ttn_flow import accept_pending_ttn_photo, finish_driver_ttn, handle_driver_photos, handle_driver_start, start_ttn_for_logist
 from services.users import TAX_LABELS, get_or_create_user, is_free_beta_mode, set_user_tax_mode
 
 
@@ -54,6 +54,9 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
         await send_fresh_menu(chat_id, user_id, reply, kb, max_client)
     elif data == "ttn:done" and (st := await get_user_state(user_id) or {}).get("state") == "wait_ttn_photo" and st.get("order_id"):
         await send_fresh_menu(chat_id, user_id, await finish_driver_ttn(user_id, st["order_id"], max_client), keep_result_menu_keyboard(), max_client)
+    elif data == "ttn:force_last" and (st := await get_user_state(user_id) or {}).get("state") == "wait_ttn_photo" and st.get("order_id"):
+        reply, kb = await accept_pending_ttn_photo(user_id, st["order_id"])
+        await send_fresh_menu(chat_id, user_id, reply, kb or ttn_driver_keyboard(), max_client)
     elif data.startswith("calc:recalc:") and data.removeprefix("calc:recalc:").isdigit():
         if reply := await start_recalc_carrier(user_id, int(data.removeprefix("calc:recalc:")), tax):
             await send_fresh_menu(chat_id, user_id, reply, back_to_home_keyboard(), max_client)

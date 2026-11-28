@@ -56,6 +56,13 @@ def ttn_driver_keyboard() -> list[list[dict]]:
     return [[{"type": "callback", "text": "✅ Готово (отправить PDF логисту)", "payload": "ttn:done", "intent": "positive"}]]
 
 
+def ttn_bad_photo_keyboard(has_pages: bool = False) -> list[list[dict]]:
+    rows = [[{"type": "callback", "text": "⚠️ Всё равно приложить", "payload": "ttn:force_last", "intent": "default"}]]
+    if has_pages:
+        rows.append([{"type": "callback", "text": "✅ Готово (отправить PDF логисту)", "payload": "ttn:done", "intent": "positive"}])
+    return rows
+
+
 def admin_keyboard(free_beta: bool = True) -> list[list[dict]]:
     action_label = "💳 Включить платный режим" if free_beta else "🟢 Включить бесплатную бету"
     return [
