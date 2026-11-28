@@ -119,8 +119,9 @@ async def accept_pending_ttn_photo(driver_user_id: int, shipment_id: int) -> tup
             if locked is None:
                 return "⚠️ Рейс не найден или уже закрыт.", ttn_driver_keyboard()
             page_num = await conn.fetchval("SELECT COALESCE(MAX(page_num), 0) + 1 FROM shipment_pages WHERE shipment_id = $1", shipment_id)
-            await conn.execute("INSERT INTO shipment_pages (shipment_id, page_num, file_path) VALUES ($1, $2, $3)", shipment_id, page_num, path)
-    file_path.unlink(missing_ok=True)
+            page_path = file_path.with_name(f"page_{page_num}.jpg")
+            file_path.replace(page_path)
+            await conn.execute("INSERT INTO shipment_pages (shipment_id, page_num, file_path) VALUES ($1, $2, $3)", shipment_id, page_num, str(page_path))
     return f"✅ Фото приложено как лист №{page_num}.", ttn_driver_keyboard()
 
 
