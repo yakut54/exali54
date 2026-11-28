@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     MAX_BOT_TOKEN: str = ""
     MAX_WEBHOOK_URL: str = "https://exali54.ru"
     MAX_WEBHOOK_SECRET: str = ""
-    DEEPSEEK_API_URL: str = "https://proxyapi.ru"
+    DEEPSEEK_API_URL: str = "https://api." + "proxyapi.ru" + "/v1/chat/completions"
     DEEPSEEK_API_KEY: str = ""
 
 
