@@ -31,7 +31,10 @@ class ParsedOrder:
     cargo_date: str | None = None
     target_profit: Decimal | None = None
     warnings: list[str] = field(default_factory=list)
-def _looks_like_order(text: str) -> bool:
+def _looks_like_order(text: str, in_dist_mode: bool = False) -> bool:
+    if in_dist_mode:
+        words = re.findall(r"[а-яё-]+", text.lower())
+        return 3 <= len(text) <= 200 and len(words) >= 2 and text.lower().strip() not in {"привет", "здравствуйте", "добрый день"}
     numbers = re.findall(r"\d+(?:[.,]\d+)?", text)
     if len(text) > 1500:
         return False
@@ -66,8 +69,8 @@ def _normalize_rate(raw: Decimal | None, rate_type: str, weight_t: Decimal | Non
         return raw
     short_total = rate_type == "total" and Decimal("15") <= raw < Decimal("2000") and not re.search(r"(?:км|р\s*/\s*км|за\s+км)", text.lower())
     return raw * Decimal("1000") if short_total or raw < Decimal("1000") else raw
-async def parse_order_text(text: str) -> ParsedOrder | None:
-    if not _looks_like_order(text) or not settings.DEEPSEEK_API_KEY:
+async def parse_order_text(text: str, in_dist_mode: bool = False) -> ParsedOrder | None:
+    if not _looks_like_order(text, in_dist_mode) or not settings.DEEPSEEK_API_KEY:
         return None
     headers = {"Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}"}
     body = {

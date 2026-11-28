@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from bot.client import WEBHOOK_URL, MaxClient
+from bot.transport.client import WEBHOOK_URL, MaxClient
 from bot.handlers import handle_update
 from config import settings
 from db import close_db_pool, init_db_pool

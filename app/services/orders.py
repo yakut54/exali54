@@ -71,7 +71,7 @@ async def pop_pending_ttn_photo(user_id: int) -> str | None:
                     user_id,
                 )
             return path
-async def create_order(user_id: int, raw_text: str, parsed: ParsedOrder, client_rate: Decimal, client_vat: bool | None, margin: Decimal | None = None, status: str = "draft") -> int:
+async def create_order(user_id: int, raw_text: str, parsed: ParsedOrder, client_rate: Decimal | None, client_vat: bool | None, margin: Decimal | None = None, status: str = "draft") -> int:
     cargo_parts = []
     if parsed.weight_t is not None:
         cargo_parts.append(f"{parsed.weight_t:g} т")

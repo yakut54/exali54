@@ -1,7 +1,7 @@
 import asyncio
 
-from bot.client import MaxClient
-from bot.keyboards import admin_keyboard, back_to_home_keyboard
+from bot.transport.client import MaxClient
+from bot.ui.keyboards import admin_keyboard, back_to_home_keyboard
 from db import get_db_pool
 from services.orders import set_user_state
 from services.users import get_all_user_ids, is_free_beta_mode, toggle_free_beta_mode
