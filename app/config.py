@@ -16,13 +16,16 @@ class Settings(BaseSettings):
     DEEPSEEK_API_URL: str = "https://api." + "proxyapi.ru" + "/v1/chat/completions"
     DEEPSEEK_API_KEY: str = ""
     DADATA_API_KEY: str = ""
-    DADATA_INN_URL: str = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party"
+    DADATA_INN_URL: str = "https://dadata.ru"
     MAX_BOT_USERNAME: str = ""
     TTN_STORAGE_DIR: str = "/data/ttn"
 
     ADMIN_USER_ID: int = 68300606
     DAILY_CALC_LIMIT: int = 50
     DAILY_INN_LIMIT: int = 20
+    FREE_TRIAL_CALC_LIMIT: int = 10
+    FREE_TRIAL_INN_LIMIT: int = 5
+    SUBSCRIPTION_PRICE_RUB: int = 990
 
 
 settings = Settings()

@@ -4,7 +4,6 @@ import httpx
 
 from bot.keyboards import keep_result_menu_keyboard
 from bot.screens import format_inn_card
-from config import settings
 from services.antifraud import check_inn
 from services.users import check_and_inc_inn_limit
 
@@ -27,9 +26,8 @@ def is_order_text(raw_text: str) -> bool:
 
 
 async def build_inn_reply(user_id: int, raw_text: str) -> tuple[str, list[list[dict]]]:
-    if not await check_and_inc_inn_limit(user_id):
-        return (f"⚠️ Бета-тест: достигнут суточный лимит ({settings.DAILY_INN_LIMIT} проверок ИНН в день). "
-                "Счётчик обновится завтра.", keep_result_menu_keyboard())
+    if limit_msg := await check_and_inc_inn_limit(user_id):
+        return limit_msg, keep_result_menu_keyboard()
     digits = extract_inn(raw_text)
     try:
         report = await check_inn(digits)

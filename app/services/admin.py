@@ -4,9 +4,12 @@ from bot.client import MaxClient
 from bot.keyboards import admin_keyboard, back_to_home_keyboard
 from db import get_db_pool
 from services.orders import set_user_state
-from services.users import get_all_user_ids
+from services.users import get_all_user_ids, is_free_beta_mode, toggle_free_beta_mode
 
-ADMIN_PANEL_TEXT = "🛠 **Админка**\nВыбери действие:"
+
+def admin_panel_text(free_beta: bool) -> str:
+    mode = "🟢 **Бесплатная бета** (без оплат)" if free_beta else "💳 **Платный режим** (триал 10 расчётов / 5 ИНН)"
+    return f"🛠 **Админка**\nРежим: {mode}\n\nВыбери действие:"
 
 
 async def get_admin_stats() -> str:
@@ -62,11 +65,15 @@ async def run_broadcast(text: str, max_client: MaxClient) -> str:
 
 
 async def admin_callback(user_id: int, data: str) -> tuple[str, list[list[dict]]]:
+    if data == "admin:toggle_beta":
+        free_beta = await toggle_free_beta_mode()
+        return admin_panel_text(free_beta), admin_keyboard(free_beta)
+    free_beta = await is_free_beta_mode()
     if data == "admin:stats":
-        return await get_admin_stats(), admin_keyboard()
+        return await get_admin_stats(), admin_keyboard(free_beta)
     if data == "admin:fails":
-        return await get_recent_failures(), admin_keyboard()
+        return await get_recent_failures(), admin_keyboard(free_beta)
     if data == "admin:broadcast":
         await set_user_state(user_id, "wait_broadcast")
         return "📢 **Рассылка**\nПришли текст сообщения одним сообщением:", back_to_home_keyboard()
-    return ADMIN_PANEL_TEXT, admin_keyboard()
+    return admin_panel_text(free_beta), admin_keyboard(free_beta)

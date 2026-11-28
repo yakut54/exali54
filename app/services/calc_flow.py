@@ -2,7 +2,6 @@ from decimal import Decimal
 
 from bot.keyboards import calc_result_keyboard, keep_result_menu_keyboard
 from bot.screens import fmt_money, format_calc_card, vat_tag
-from config import settings
 from services.calc_parse import max_carrier_breakeven, parse_carrier_reply, pick_client_offer
 from services.calculator import calculate_margin
 from services.orders import (
@@ -21,9 +20,8 @@ async def build_calc_reply(user_id: int, raw_text: str, tax_mode: str) -> tuple[
     """Вернуть (текст_ответа, клавиатура) для расчёта рейса."""
     state_row = await get_user_state(user_id)
     carrier_step = bool(state_row and state_row["state"] == "wait_carrier_rate" and state_row["order_id"])
-    if not carrier_step and await is_calc_limit_exceeded(user_id):
-        return (f"⚠️ Бета-тест: достигнут суточный лимит ({settings.DAILY_CALC_LIMIT} расчётов в день). "
-                "Счётчик обновится завтра.", keep_result_menu_keyboard())
+    if not carrier_step and (limit_msg := await is_calc_limit_exceeded(user_id)):
+        return limit_msg, keep_result_menu_keyboard()
     if carrier_step:
         carrier_rate, carrier_vat = parse_carrier_reply(raw_text)
         if carrier_rate is not None:
