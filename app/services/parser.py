@@ -106,7 +106,8 @@ def _rate_hint(text: str) -> tuple[Decimal, str, bool | None] | None:
         tail = lowered[match.end():match.end() + 3]
         if (suffix in {"кг", "т", "м3", "м²"} or
                 tail.startswith(("кг", "т", "м3", "м²")) or
-                re.match(r"[./]\s*\d", tail)):
+                re.match(r"[./]\s*\d", tail) or
+                re.fullmatch(r"\d{1,2}[.,]\d{1,2}", raw_text)):
             continue
         raw = _to_decimal(raw_text)
         if raw is None:
