@@ -22,22 +22,29 @@ class ParsedOrder:
     weight_t: Decimal | None
     client_rate: Decimal
     client_vat: bool | None
-    carrier_rate: Decimal
-    carrier_vat: bool | None
-    deadhead_km: Decimal | None
+    carrier_rate: Decimal | None = None
+    carrier_vat: bool | None = None
+    client_alt_rate: Decimal | None = None
+    client_alt_vat: bool | None = None
+    deadhead_km: Decimal | None = None
     warnings: list[str] = field(default_factory=list)
 
 
 def _looks_like_order(text: str) -> bool:
     numbers = re.findall(r"\d+(?:[.,]\d+)?", text)
-    return len(numbers) >= 2 and len(text) <= 500
+    return len(numbers) >= 1 and len(text) <= 1500
 
 
 def _to_decimal(val) -> Decimal | None:
     if val is None or isinstance(val, bool):
         return None
+    s = str(val).replace(" ", "").replace("\u00a0", "").strip()
+    if re.fullmatch(r"\d{1,3}(?:\.\d{3})+", s):
+        s = s.replace(".", "")
+    else:
+        s = s.replace(",", ".")
     try:
-        return Decimal(str(val).replace(",", ".").strip())
+        return Decimal(s)
     except (InvalidOperation, ValueError):
         return None
 
@@ -83,7 +90,7 @@ async def parse_order_text(text: str) -> ParsedOrder | None:
             choices = resp.json().get("choices") or []
             if not choices:
                 return None
-            content = choices[0].get("message", {}).get("content", "")
+            content = choices.get("message", {}).get("content", "")
             data = json.loads(content)
     except Exception as exc:
         logger.warning("Failed to parse order via LLM: %s", exc)
@@ -99,15 +106,18 @@ async def parse_order_text(text: str) -> ParsedOrder | None:
     rate_type = data.get("rate_type") if data.get("rate_type") in ("total", "per_ton", "per_km") else "total"
 
     client_rate = _normalize_rate(_to_decimal(data.get("client_rate_raw")), rate_type, weight_t, warnings)
-    carrier_rate = _normalize_rate(_to_decimal(data.get("carrier_rate_raw")), rate_type, weight_t, warnings)
-    if client_rate is None or carrier_rate is None:
+    if client_rate is None:
         return None
+
+    client_alt_rate = _normalize_rate(_to_decimal(data.get("client_alt_rate_raw")), rate_type, weight_t, warnings)
+    carrier_rate = _normalize_rate(_to_decimal(data.get("carrier_rate_raw")), rate_type, weight_t, warnings)
 
     deadhead_km = _to_decimal(data.get("deadhead_km"))
     if deadhead_km is not None and deadhead_km < 0:
         deadhead_km = None
 
     c_vat = data.get("client_vat") if isinstance(data.get("client_vat"), bool) else None
+    c_alt_vat = data.get("client_alt_vat") if isinstance(data.get("client_alt_vat"), bool) else None
     p_vat = data.get("carrier_vat") if isinstance(data.get("carrier_vat"), bool) else None
 
     return ParsedOrder(
@@ -118,6 +128,8 @@ async def parse_order_text(text: str) -> ParsedOrder | None:
         client_vat=c_vat,
         carrier_rate=carrier_rate,
         carrier_vat=p_vat,
+        client_alt_rate=client_alt_rate,
+        client_alt_vat=c_alt_vat,
         deadhead_km=deadhead_km,
         warnings=warnings,
     )
