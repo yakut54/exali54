@@ -60,11 +60,13 @@ CREATE TABLE IF NOT EXISTS user_states (
     state VARCHAR(64) NOT NULL DEFAULT 'idle',
     order_id INT REFERENCES orders(id) ON DELETE SET NULL,
     last_mid VARCHAR(128),
-    last_text TEXT
+    last_text TEXT,
+    pending_photo_path TEXT
 );
 
 ALTER TABLE user_states ADD COLUMN IF NOT EXISTS last_mid VARCHAR(128);
 ALTER TABLE user_states ADD COLUMN IF NOT EXISTS last_text TEXT;
+ALTER TABLE user_states ADD COLUMN IF NOT EXISTS pending_photo_path TEXT;
 
 CREATE TABLE IF NOT EXISTS inn_cache (
     inn VARCHAR(12) PRIMARY KEY,

@@ -116,7 +116,16 @@ async def prepare_shipment_pdf(shipment_id: int, driver_user_id: int) -> tuple[d
         )
     if not rows:
         raise ValueError("Ты ещё не отправил ни одного фото ТТН.")
-    return dict(row), img2pdf.convert([r["file_path"] for r in rows])
+    paths = [
+        Path(settings.TTN_STORAGE_DIR) / r["file_path"]
+        if not Path(r["file_path"]).is_absolute()
+        else Path(r["file_path"])
+        for r in rows
+    ]
+    images_bytes = [path.read_bytes() for path in paths if path.is_file()]
+    if not images_bytes:
+        return dict(row), b""
+    return dict(row), img2pdf.convert(images_bytes)
 
 
 async def mark_shipment_completed(shipment_id: int) -> None:

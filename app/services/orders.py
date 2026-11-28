@@ -25,7 +25,7 @@ async def get_user_state(user_id: int) -> dict | None:
     pool = get_db_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT user_id, state, order_id, last_mid, last_text FROM user_states WHERE user_id = $1",
+            "SELECT user_id, state, order_id, last_mid, last_text, pending_photo_path FROM user_states WHERE user_id = $1",
             user_id,
         )
         return dict(row) if row else None
@@ -46,16 +46,28 @@ async def save_last_mid(user_id: int, mid: str | None, text: str | None = None) 
             VALUES ($1, 'idle', $2, $3)
             ON CONFLICT (user_id) DO UPDATE
                 SET last_mid = EXCLUDED.last_mid,
-                    last_text = CASE
-                        WHEN user_states.state = 'wait_ttn_photo'
-                             AND user_states.last_text LIKE '%/pending_%'
-                        THEN user_states.last_text
-                        ELSE EXCLUDED.last_text
-                    END
+                    last_text = EXCLUDED.last_text
             """,
             user_id,
             mid,
             text,
+        )
+
+
+async def set_pending_ttn_photo(user_id: int, path: str) -> None:
+    pool = get_db_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE user_states SET pending_photo_path = $1 WHERE user_id = $2", path, user_id)
+
+
+async def pop_pending_ttn_photo(user_id: int) -> str | None:
+    pool = get_db_pool()
+    async with pool.acquire() as conn:
+        return await conn.fetchval(
+            "WITH old AS MATERIALIZED (SELECT pending_photo_path FROM user_states WHERE user_id = $1 FOR UPDATE) "
+            "UPDATE user_states SET pending_photo_path = NULL WHERE user_id = $1 "
+            "RETURNING (SELECT pending_photo_path FROM old)",
+            user_id,
         )
 
 
