@@ -47,15 +47,15 @@ def check_photo_quality(image_bytes: bytes) -> tuple[bool, str]:
     with Image.open(io.BytesIO(image_bytes)) as img:
         gray = img.convert("L")
     if min(gray.size) < 600:
-        return False, "Слишком низкое разрешение фото. Сфотографируй лист ближе."
+        return False, "Лист снят слишком далеко. Поднеси камеру ближе."
     brightness = ImageStat.Stat(gray).mean[0]
     if brightness < 45:
-        return False, "Фото слишком тёмное. Включи свет или вспышку и пересними."
+        return False, "Фото слишком тёмное. Добавь света и пересними лист."
     if brightness > 245:
-        return False, "Фото засвечено. Убери вспышку или блик."
+        return False, "На фото сильный блик. Убери вспышку и пересними лист."
     edges = gray.filter(ImageFilter.FIND_EDGES)
     if ImageStat.Stat(edges).stddev[0] < 12.0:
-        return False, "Фото размытое (текст не читается). Протри камеру и сфотографируй чётче."
+        return False, "Фото размытое — текст не читается. Протри камеру и пересними лист."
     return True, "OK"
 
 
@@ -115,7 +115,7 @@ async def prepare_shipment_pdf(shipment_id: int, driver_user_id: int) -> tuple[d
             shipment_id,
         )
     if not rows:
-        raise ValueError("Ты ещё не отправил ни одного фото ТТН.")
+        raise ValueError("Сначала отправь хотя бы одну страницу ТТН.")
     paths = [
         Path(settings.TTN_STORAGE_DIR) / r["file_path"]
         if not Path(r["file_path"]).is_absolute()

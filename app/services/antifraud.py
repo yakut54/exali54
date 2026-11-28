@@ -70,7 +70,7 @@ def _build_report(inn: str, suggestion: dict, from_cache: bool) -> InnReport:
 async def check_inn(inn: str) -> InnReport | None:
     value = (inn or "").strip()
     if not validate_inn(value):
-        raise ValueError("Некорректная контрольная сумма ИНН")
+        raise ValueError("ИНН введён с ошибкой: контрольная сумма не совпадает.")
 
     pool = get_db_pool()
     async with pool.acquire() as conn:
@@ -83,7 +83,7 @@ async def check_inn(inn: str) -> InnReport | None:
         return _build_report(value, _as_dict(row["payload"]), True)
 
     if not settings.DADATA_API_KEY:
-        raise RuntimeError("DADATA_API_KEY не настроен")
+        raise RuntimeError("Сервис проверки ИНН не настроен.")
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.post(

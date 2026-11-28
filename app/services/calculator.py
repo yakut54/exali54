@@ -54,7 +54,7 @@ def calculate_margin(
     deadhead_km: Decimal | None = None,
 ) -> CalcResult:
     if client_rate <= 0 or carrier_rate < 0:
-        raise ValueError("Ставка заказчика должна быть > 0, ставка перевозчика >= 0")
+        raise ValueError("Ставка клиента должна быть больше нуля, ставка перевозчика — не меньше нуля.")
 
     warning: str | None = None
     vat_to_pay = Decimal("0")
@@ -68,7 +68,7 @@ def calculate_margin(
         vat_in = (carrier_rate - cost_net) if carrier_vat else Decimal("0")
 
         if not client_vat:
-            warning = "Вы на ОСНО: НДС 22% выделен из ставки клиента, уточните договор."
+            warning = "На ОСНО НДС выделяется из ставки клиента — проверь условия договора."
         if not carrier_vat:
             carrier_eq = _r2(carrier_rate * VAT_DIVISOR / Decimal("100"))
 
@@ -82,22 +82,22 @@ def calculate_margin(
         vat_to_pay = client_rate - rev_net
         income_tax = rev_net * USN_6_RATE
         if not client_vat:
-            warning = "УСН + НДС 5%: в ставку клиента заложен НДС 5%."
+            warning = "В ставке клиента учтён НДС 5% по режиму УСН."
         target_rev_net = carrier_rate / (Decimal("1") - USN_6_RATE)
         stop_price = target_rev_net * USN_VAT_5_DIVISOR / Decimal("100")
 
     elif tax_mode == "usn_6":
-        vat_to_pay, warning = _usn_vat(client_rate, client_vat, "УСН 6%: выделенный НДС 22% уплачивается в бюджет без вычета входящего НДС.")
+        vat_to_pay, warning = _usn_vat(client_rate, client_vat, "Выделенный НДС 22% уплачивается в бюджет без вычета входящего НДС.")
         income_tax = client_rate * USN_6_RATE
         stop_price = carrier_rate / (Decimal("1") - USN_6_RATE)
 
     elif tax_mode == "usn_6_agent":
-        vat_to_pay, warning = _usn_vat(client_rate, client_vat, "Агентский УСН: выделенный НДС 22% уплачивается в бюджет без вычета входящего НДС.")
+        vat_to_pay, warning = _usn_vat(client_rate, client_vat, "Выделенный НДС 22% уплачивается в бюджет без вычета входящего НДС.")
         income_tax = max(Decimal("0"), client_rate - carrier_rate) * USN_6_RATE
         stop_price = carrier_rate
 
     elif tax_mode == "usn_15":
-        vat_to_pay, warning = _usn_vat(client_rate, client_vat, "УСН 15%: выделенный НДС 22% уплачивается в бюджет без вычета входящего НДС.")
+        vat_to_pay, warning = _usn_vat(client_rate, client_vat, "Выделенный НДС 22% уплачивается в бюджет без вычета входящего НДС.")
         tax_15 = max(Decimal("0"), client_rate - carrier_rate) * USN_15_RATE
         tax_min = client_rate * USN_MIN_TAX_RATE
         income_tax = max(tax_15, tax_min)

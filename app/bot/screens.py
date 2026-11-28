@@ -22,27 +22,27 @@ def screen_text(screen: str, tax_mode: str = "osno_22") -> str:
     if screen == "home":
         return (
             "**🚚 Ехали! • Ассистент логиста**\n"
-            f"Налог: **{tax_name}**\n\n"
-            "Пришли параметры рейса (или перешли пост из чата) либо выбери инструмент:"
+            f"Налоговый режим: **{tax_name}**\n\n"
+            "Выбери нужный инструмент или пришли заявку прямо в чат."
         )
     if screen == "tax":
-        return f"**⚙️ Система налогообложения**\nСейчас: **{tax_name}**"
+        return f"**⚙️ Налоговый режим**\nСейчас выбран: **{tax_name}**"
     if screen == "calc":
         return (
             "**🧮 Стоп-цена и маржа**\n"
-            "Напиши рейс одной строкой или перешли пост с грузом:\n"
+            "Пришли заявку одной строкой или перешли пост с грузом:\n"
             "`нск омск 20т 140 с ндс / 100 ип подача 40`"
         )
     if screen == "dist":
         return (
-            "**🛣 Расстояние и расчёт ₽/км**\n"
-            "Напиши два города или добавь сумму для расчёта ставки с НДС и без НДС:\n"
-            "• `Уссурийск Москва` — пробег по трассе\n"
-            "• `Уссурийск Москва 750 тыс наличкой` — пробег + ₽/км с НДС 22% и без НДС"
+            "**🛣 Расстояние и ставка за километр**\n"
+            "Напиши маршрут. Если добавишь сумму — посчитаю ставку за километр:\n"
+            "• `Уссурийск Москва` — расстояние по трассе\n"
+            "• `Уссурийск Москва 750 тыс наличкой` — сумма и ставка с НДС и без НДС"
         )
     if screen == "inn":
-        return "**🛡 Проверка ИНН**\nОтправь `10` или `12` цифр ИНН контрагента:"
-    return "**📄 Сбор ТТН**\nСоздание ссылки для водителя (скоро)"
+        return "**🛡 Проверка ИНН**\nПришли 10 или 12 цифр ИНН контрагента."
+    return "**📄 Сбор ТТН**\nСоздай ссылку для водителя и получи готовый PDF."
 
 
 def format_calc_card(
@@ -65,23 +65,23 @@ def format_calc_card(
     profit_icon = "🟢" if res.net_profit > 0 else "🔴"
     lines = [
         title,
-        f"Режим: **{TAX_LABELS.get(res.tax_mode, res.tax_mode)}**",
+        f"Налоговый режим: **{TAX_LABELS.get(res.tax_mode, res.tax_mode)}**",
         "",
-        f"Заказчик: **{fmt_money(res.client_rate)} ₽** ({vat_tag(client_vat)})",
-        f"Перевозчик: **{fmt_money(res.carrier_rate)} ₽** ({vat_tag(carrier_vat)})",
-        f"Налоги (НДС {fmt_money(res.vat_to_pay)} + налог {fmt_money(res.income_tax)}): **{fmt_money(res.total_taxes)} ₽**",
+        f"Ставка клиента: **{fmt_money(res.client_rate)} ₽** ({vat_tag(client_vat)})",
+        f"Ставка перевозчика: **{fmt_money(res.carrier_rate)} ₽** ({vat_tag(carrier_vat)})",
+        f"Налоги: **{fmt_money(res.total_taxes)} ₽** (НДС {fmt_money(res.vat_to_pay)} + налог {fmt_money(res.income_tax)})",
         "",
-        f"{profit_icon} Чистая прибыль: **{fmt_money(res.net_profit)} ₽** (**{res.margin_pct}%**)",
-        f"🛑 Стоп-цена для клиента: **{fmt_money(res.stop_price)} ₽**",
+        f"{profit_icon} Прибыль: **{fmt_money(res.net_profit)} ₽** (**{res.margin_pct}%**)",
+        f"🛑 Минимальная ставка клиента: **{fmt_money(res.stop_price)} ₽**",
     ]
     if res.carrier_with_vat_eq is not None:
-        lines.append(f"⚖️ Эквивалент ставки перевозчика с НДС: **{fmt_money(res.carrier_with_vat_eq)} ₽**")
+        lines.append(f"⚖️ Ставка перевозчика с НДС: **{fmt_money(res.carrier_with_vat_eq)} ₽**")
     if res.platon_hint is not None:
-        lines.append(f"🛣 Платон за подачу: ~**{fmt_money(res.platon_hint)} ₽**")
+        lines.append(f"🛣 Платон за подачу: примерно **{fmt_money(res.platon_hint)} ₽**")
 
     notes = ([res.warning] if res.warning else []) + extra_notes
     if carrier_vat is None and res.tax_mode == "osno_22":
-        notes.append("НДС перевозчика не указан — расчёт выполнен как БЕЗ НДС.")
+        notes.append("НДС перевозчика не указан — считаю ставку без НДС.")
     if notes:
         lines.append("")
         lines.extend(f"⚠️ {n}" for n in notes)

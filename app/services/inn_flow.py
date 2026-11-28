@@ -32,14 +32,14 @@ async def build_inn_reply(user_id: int, raw_text: str) -> tuple[str, list[list[d
     try:
         report = await check_inn(digits)
     except ValueError as exc:
-        return str(exc), keep_result_menu_keyboard()
+        return f"⚠️ {exc}", keep_result_menu_keyboard()
     except RuntimeError:
-        return ("⚠️ Сервис проверки ИНН временно недоступен (не задан ключ API).",
+        return ("⚠️ Проверка ИНН временно недоступна. Попробуй позже.",
                 keep_result_menu_keyboard())
     except httpx.HTTPError:
-        return ("⚠️ Не удалось связаться с реестром ФНС/DaData. Попробуй через минуту.",
+        return ("⚠️ Не удалось получить данные из реестра. Попробуй ещё раз через минуту.",
                 keep_result_menu_keyboard())
     if report is None:
-        return (f"🔍 Организация или ИП с ИНН `{digits}` не найдены в ЕГРЮЛ/ЕГРИП.",
+        return (f"🔍 По ИНН `{digits}` ничего не найдено в ЕГРЮЛ/ЕГРИП.",
                 keep_result_menu_keyboard())
     return format_inn_card(report), keep_result_menu_keyboard()

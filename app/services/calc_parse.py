@@ -24,10 +24,10 @@ def pick_client_offer(parsed: ParsedOrder, tax_mode: str) -> tuple[Decimal, bool
         return parsed.client_rate, parsed.client_vat, None
     wants_vat = tax_mode in ("osno_22", "usn_5_nds")
     if wants_vat and parsed.client_alt_vat is True and parsed.client_vat is not True:
-        return parsed.client_alt_rate, True, f"Из вилки выбрана ставка с НДС ({fmt_money(parsed.client_alt_rate)} ₽)"
+        return parsed.client_alt_rate, True, f"Взял ставку с НДС: {fmt_money(parsed.client_alt_rate)} ₽"
     if not wants_vat and parsed.client_alt_vat is False and parsed.client_vat is not False:
-        return parsed.client_alt_rate, False, f"Из вилки выбрана ставка без НДС ({fmt_money(parsed.client_alt_rate)} ₽)"
-    note = f"Вторая ставка в вилке: {fmt_money(parsed.client_alt_rate)} ₽ ({vat_tag(parsed.client_alt_vat)})"
+        return parsed.client_alt_rate, False, f"Взял ставку без НДС: {fmt_money(parsed.client_alt_rate)} ₽"
+    note = f"Вторая ставка: {fmt_money(parsed.client_alt_rate)} ₽ ({vat_tag(parsed.client_alt_vat)})"
     return parsed.client_rate, parsed.client_vat, note
 
 

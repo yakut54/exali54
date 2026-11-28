@@ -80,7 +80,7 @@ class MaxClient:
     async def set_commands(self) -> dict:
         commands = [
             {"name": "start", "description": "🏠 Главное меню"},
-            {"name": "calc", "description": "🧮 Стоп-цена и маржа"},
+            {"name": "calc", "description": "🧮 Рассчитать маржу"},
             {"name": "inn", "description": "🛡 Проверить ИНН"},
             {"name": "tax", "description": "⚙️ Налоговый режим"},
         ]

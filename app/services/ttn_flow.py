@@ -49,7 +49,7 @@ async def start_ttn_for_logist(logist_uid: int, logist_cid: int, bot_username: s
     text = (
         "**📄 Сбор ТТН**\n"
         f"{link}\n\n"
-        "Перешли ссылку водителю: он отправит фото страниц, а бот склеит их в PDF и пришлёт сюда."
+        "Отправь ссылку водителю. Он пришлёт фото страниц, а я соберу их в один PDF."
     )
     return text, keep_result_menu_keyboard()
 
@@ -59,17 +59,17 @@ async def handle_driver_start(driver_uid: int, start_arg: str) -> str | None:
         return None
     shipment = await attach_driver_to_shipment(start_arg, driver_uid)
     if shipment is None:
-        return "⚠️ Ссылка устарела или документы по этому рейсу уже сданы."
+        return "⚠️ Ссылка недействительна или этот рейс уже закрыт."
     await set_user_state(driver_uid, "wait_ttn_photo", order_id=shipment["id"])
     return ("📸 **Сбор документов по рейсу**\n"
-            "Отправь чёткие фото всех страниц ТТН (по одному или сразу несколько):")
+            "Пришли чёткие фото всех страниц ТТН — по одному или несколько сразу.")
 
 
 async def handle_driver_photos(
     driver_uid: int, shipment_id: int, image_urls: list[str], max_client: MaxClient
 ) -> tuple[str, list[list[dict]]]:
     if not image_urls:
-        return "📸 Пришли фото страниц ТТН или нажми «✅ Готово».", ttn_driver_keyboard()
+        return "📸 Пришли фото страниц ТТН или нажми «✅ Готово», когда закончишь.", ttn_driver_keyboard()
     accepted: list[int] = []
     rejected: list[str] = []
     pending_raw: bytes | None = None
@@ -84,18 +84,18 @@ async def handle_driver_photos(
         except ValueError as exc:
             rejected.append(str(exc))
         except httpx.HTTPError:
-            rejected.append("Не удалось скачать фото. Попробуй отправить ещё раз.")
+            rejected.append("Не удалось загрузить фото. Пришли его ещё раз.")
     if pending_raw is not None:
         await _remove_pending(driver_uid)
         await _save_pending(driver_uid, shipment_id, pending_raw)
-        text = "⚠️ **Фото не принято (плохо читается):**\n"
+        text = "⚠️ **Фото не принято — его плохо видно:**\n"
         text += "\n".join(f"• {r}" for r in dict.fromkeys(rejected))
-        text += "\n\nСделай более чёткое фото при хорошем освещении и пришли его снова (или нажми «Всё равно приложить», если лучше снять не получается)."
+        text += "\n\nПересними лист при хорошем освещении. Если лучше снять не получается, нажми «Всё равно приложить»."
         return text, ttn_bad_photo_keyboard(await _has_pages(shipment_id))
     if not accepted:
-        return "❌ Ни одна страница не принята:\n" + "\n".join(f"⚠️ {r}" for r in dict.fromkeys(rejected)), []
+        return "❌ Не удалось принять ни одной страницы:\n" + "\n".join(f"⚠️ {r}" for r in dict.fromkeys(rejected)), []
     lines = [f"✅ Принято страниц: {len(accepted)} (последняя — лист №{max(accepted)})",
-             "Когда все страницы отправлены, нажми «✅ Готово»."]
+             "Когда всё отправишь, нажми «✅ Готово»."]
     lines.extend(f"⚠️ {r}" for r in dict.fromkeys(rejected))
     state = await get_user_state(driver_uid)
     keyboard = ttn_bad_photo_keyboard(True) if state and state.get("pending_photo_path") else ttn_driver_keyboard()
@@ -105,13 +105,13 @@ async def handle_driver_photos(
 async def accept_pending_ttn_photo(driver_user_id: int, shipment_id: int) -> tuple[str, list[list[dict]]]:
     state = await get_user_state(driver_user_id)
     if (state or {}).get("order_id") != shipment_id:
-        return "⚠️ Нет фотографии для принудительного добавления.", ttn_driver_keyboard()
+        return "⚠️ Не нашёл отложенное фото. Пришли его ещё раз.", ttn_driver_keyboard()
     path = await pop_pending_ttn_photo(driver_user_id)
     if not path:
-        return "⚠️ Нет фотографии для принудительного добавления.", ttn_driver_keyboard()
+        return "⚠️ Не нашёл отложенное фото. Пришли его ещё раз.", ttn_driver_keyboard()
     file_path = Path(path)
     if not file_path.is_file():
-        return "⚠️ Временное фото уже недоступно. Пришли его ещё раз.", ttn_driver_keyboard()
+        return "⚠️ Отложенное фото больше недоступно. Пришли его ещё раз.", ttn_driver_keyboard()
     pool = get_db_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -140,20 +140,20 @@ async def finish_driver_ttn(driver_uid: int, shipment_id: int, max_client: MaxCl
     try:
         paths = await _page_files(shipment_id)
         if not paths:
-            return "⚠️ Нельзя собрать PDF: ты ещё не отправил ни одного фото ТТН."
+            return "⚠️ Не могу собрать PDF: пока нет ни одной страницы ТТН."
         missing = [path for path in paths if not Path(path).is_file()]
         if missing:
-            return "⚠️ Нельзя собрать PDF: файл одной из страниц ТТН отсутствует на сервере."
+            return "⚠️ Не могу собрать PDF: файл одной из страниц не найден."
         result = await prepare_shipment_pdf(shipment_id, driver_uid)
     except ValueError as exc:
         return str(exc)
     except Exception:
-        return "⚠️ Не удалось подготовить PDF из-за ошибки файла. Пришли страницы ТТН ещё раз."
+        return "⚠️ Не удалось подготовить PDF. Пришли страницы ТТН ещё раз."
     if result is None:
         return "⚠️ Рейс не найден или уже закрыт."
     shipment, pdf_bytes = result
     if not pdf_bytes:
-        return "⚠️ Не удалось собрать PDF: файлы страниц ТТН не найдены на сервере."
+        return "⚠️ Не могу собрать PDF: файлы страниц не найдены."
     try:
         await max_client.send_document(
             shipment["logist_chat_id"],
@@ -162,7 +162,7 @@ async def finish_driver_ttn(driver_uid: int, shipment_id: int, max_client: MaxCl
             caption=f"📄 **ТТН по рейсу `{shipment['token']}` готовы!**",
         )
     except Exception:
-        return "⚠️ Не удалось отправить PDF логисту. Попробуй нажать «✅ Готово» ещё раз."
+        return "⚠️ Не удалось отправить PDF логисту. Нажми «✅ Готово» ещё раз."
     await mark_shipment_completed(shipment_id)
     await clear_user_state(driver_uid)
-    return "✅ Документы склеены в PDF и отправлены логисту! Спасибо."
+    return "✅ Готово. PDF отправлен логисту."

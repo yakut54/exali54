@@ -49,8 +49,8 @@ async def build_calc_reply(
             return "🤔 Укажи два города (например: спб мск или Уссурийск Москва 750 тыс нал)", keep_result_menu_keyboard()
         await log_parse_failure(user_id, raw_text)
         return (
-            "🤔 Не вижу ставок в сообщении.\n"
-            "Пришли рейс с ценами (например: `нск омск 20т 140 с ндс / 100 ип`) или перешли пост со ставкой заказчика.",
+            "🤔 Не смог найти в сообщении маршрут и ставку.\n"
+            "Пришли заявку, например: `нск омск 20т 140 с ндс / 100 ип`.",
             keep_result_menu_keyboard(),
         )
 
@@ -65,13 +65,13 @@ async def build_calc_reply(
         if in_dist_mode:
             return "🤔 Укажи два города (например: спб мск или Уссурийск Москва 750 тыс нал)", keep_result_menu_keyboard()
         await log_parse_failure(user_id, raw_text)
-        return "🤔 Не вижу ставки в сообщении.", keep_result_menu_keyboard()
+        return "🤔 Не смог найти маршрут и ставку. Пришли заявку одной строкой.", keep_result_menu_keyboard()
     client_rate, client_vat, fork_note = pick_client_offer(parsed, tax_mode)
     if parsed.client_rate_type == "per_km" and dist and parsed.distance_km is None:
         client_rate *= dist[0]
     if (in_dist_mode or parsed.calc_mode == "rate_per_km") and (in_dist_mode or parsed.carrier_rate is None):
         breakdown = rate_breakdown_by_vat(client_rate, bool(client_vat), dist[0] if dist else None)
-        distance = f"📍 {parsed.from_city} → {parsed.to_city} · {'~' if dist and dist[1] else ''}{dist[0]} км" if dist else "⚠️ Расстояние не удалось определить, ₽/км не рассчитан."
+        distance = f"📍 {parsed.from_city} → {parsed.to_city} · {'примерно ' if dist and dist[1] else ''}{dist[0]} км" if dist else "⚠️ Не удалось определить расстояние — ставку за километр не считаю."
         per_km = dist is not None
         return (
             f"{distance}\n"
@@ -96,7 +96,7 @@ async def build_calc_reply(
         lines = [route, f"Заказчик: **{fmt_money(client_rate)} ₽** ({vat_tag(client_vat)})", f"Потолок в ноль (без НДС): **{fmt_money(max_no_vat)} ₽**"]
         if max_with_vat is not None:
             lines.append(f"Потолок в ноль (с НДС): **{fmt_money(max_with_vat)} ₽**")
-        lines.extend(["", "💬 **За сколько забирает перевозчик?**\nНапиши ставку (например: `110 ип` или `120 с ндс`):"])
+        lines.extend(["", "💬 **Какая ставка у перевозчика?**\nНапиши, например: `110 ип` или `120 с ндс`."])
         if extra_notes:
             lines.extend(["", *(f"⚠️ {n}" for n in extra_notes)])
         return "\n".join(lines), keep_result_menu_keyboard()
@@ -116,9 +116,9 @@ async def start_recalc_carrier(user_id: int, order_id: int, tax_mode: str) -> st
     client_rate = Decimal(str(order["client_rate"]))
     max_no_vat, _ = max_carrier_breakeven(tax_mode, client_rate)
     return (
-        "✏️ **Пересчёт ставки водителя**\n"
+        "✏️ **Пересчитаем ставку перевозчика**\n"
         f"📍 {order['route_from'] or 'Откуда'} → {order['route_to'] or 'Куда'}\n"
         f"Заказчик: **{fmt_money(client_rate)} ₽**\n"
         f"Потолок в ноль (без НДС): **{fmt_money(max_no_vat)} ₽**\n\n"
-        "Напиши новую ставку перевозчика (например: `105 ип` или `115 с ндс`):"
+        "Пришли новую ставку, например: `105 ип` или `115 с ндс`."
     )

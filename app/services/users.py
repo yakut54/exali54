@@ -59,7 +59,7 @@ async def check_and_inc_inn_limit(user_id: int) -> str | None:
                 "WHERE user_id = $1 AND (inn_daily_date < CURRENT_DATE OR inn_daily_count < $2) RETURNING user_id",
                 user_id, settings.DAILY_INN_LIMIT,
             )
-            return None if row else f"⚠️ Бета-тест: достигнут суточный лимит ({settings.DAILY_INN_LIMIT} проверок ИНН в день)."
+            return None if row else f"⚠️ Лимит на сегодня исчерпан: можно проверить до {settings.DAILY_INN_LIMIT} ИНН в день. Попробуй завтра."
         row = await conn.fetchrow(
             "UPDATE users SET inn_total_count = inn_total_count + 1 "
             "WHERE user_id = $1 AND ((paid_until IS NOT NULL AND paid_until > NOW()) OR inn_total_count < $2) RETURNING user_id",
@@ -67,7 +67,7 @@ async def check_and_inc_inn_limit(user_id: int) -> str | None:
         )
         if row:
             return None
-        return f"🔒 Бесплатный пакет ({settings.FREE_TRIAL_INN_LIMIT} проверок ИНН) исчерпан.\nТариф Pro: **{settings.SUBSCRIPTION_PRICE_RUB} ₽ / мес** без лимитов."
+            return f"🔒 Бесплатный пакет проверок ИНН закончился.\nPro: **{settings.SUBSCRIPTION_PRICE_RUB} ₽ в месяц** без лимитов."
 
 
 async def is_calc_limit_exceeded(user_id: int) -> str | None:
@@ -81,13 +81,13 @@ async def is_calc_limit_exceeded(user_id: int) -> str | None:
                 "SELECT COUNT(*) >= $2 FROM orders WHERE user_id = $1 AND created_at >= CURRENT_DATE",
                 user_id, settings.DAILY_CALC_LIMIT,
             )
-            return f"⚠️ Бета-тест: достигнут суточный лимит ({settings.DAILY_CALC_LIMIT} расчётов в день)." if exceeded else None
+            return f"⚠️ Лимит на сегодня исчерпан: доступно до {settings.DAILY_CALC_LIMIT} расчётов в день. Попробуй завтра." if exceeded else None
         is_pro = await conn.fetchval("SELECT paid_until IS NOT NULL AND paid_until > NOW() FROM users WHERE user_id = $1", user_id)
         if is_pro:
             return None
         used = await conn.fetchval("SELECT COUNT(*) FROM orders WHERE user_id = $1 AND status = 'calculated'", user_id)
         if used >= settings.FREE_TRIAL_CALC_LIMIT:
-            return f"🔒 Бесплатный пакет ({settings.FREE_TRIAL_CALC_LIMIT} расчётов) исчерпан.\nТариф Pro: **{settings.SUBSCRIPTION_PRICE_RUB} ₽ / мес** без лимитов."
+            return f"🔒 Бесплатный пакет расчётов закончился.\nPro: **{settings.SUBSCRIPTION_PRICE_RUB} ₽ в месяц** без лимитов."
         return None
 
 

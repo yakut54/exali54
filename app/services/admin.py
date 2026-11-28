@@ -8,8 +8,8 @@ from services.users import get_all_user_ids, is_free_beta_mode, toggle_free_beta
 
 
 def admin_panel_text(free_beta: bool) -> str:
-    mode = "🟢 **Бесплатная бета** (без оплат)" if free_beta else "💳 **Платный режим** (триал 10 расчётов / 5 ИНН)"
-    return f"🛠 **Админка**\nРежим: {mode}\n\nВыбери действие:"
+    mode = "🟢 **Бесплатная бета**" if free_beta else "💳 **Платный режим**"
+    return f"🛠 **Панель управления**\nРежим: {mode}\n\nВыбери действие:"
 
 
 async def get_admin_stats() -> str:
@@ -28,9 +28,9 @@ async def get_admin_stats() -> str:
         )
     return (
         "📊 **Сводка**\n"
-        f"👥 Пользователи: {row['users_total']} (новых за 24 ч: {row['users_new']})\n"
-        f"🧮 Расчёты: {row['calc_day']} за 24 ч / {row['calc_total']} всего\n"
-        f"🛡 ИНН в кэше: {row['inn_cached']}\n"
+        f"👥 Пользователи: {row['users_total']} · новых за 24 ч: {row['users_new']}\n"
+        f"🧮 Расчёты: {row['calc_day']} за 24 ч · всего: {row['calc_total']}\n"
+        f"🛡 Записей ИНН в кэше: {row['inn_cached']}\n"
         f"📄 Завершённых ТТН: {row['ttn_done']}"
     )
 
@@ -43,8 +43,8 @@ async def get_recent_failures(limit: int = 7) -> str:
             limit,
         )
     if not rows:
-        return "✅ Нераспознанных запросов пока нет."
-    lines = ["⚠️ **Последние ошибки парсера**"]
+        return "✅ Нераспознанных запросов нет."
+    lines = ["⚠️ **Последние нераспознанные заявки**"]
     for r in rows:
         text = " ".join((r["raw_text"] or "").split())[:120]
         lines.append(f"• {r['created_at']:%d.%m %H:%M} · `{r['user_id']}` — {text}")
@@ -61,7 +61,7 @@ async def run_broadcast(text: str, max_client: MaxClient) -> str:
         except Exception:
             pass
         await asyncio.sleep(0.05)
-    return f"📢 Рассылка завершена: доставлено {ok} из {len(user_ids)}"
+    return f"📢 Готово: сообщение доставлено {ok} из {len(user_ids)} пользователей."
 
 
 async def admin_callback(user_id: int, data: str) -> tuple[str, list[list[dict]]]:

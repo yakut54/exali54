@@ -47,7 +47,7 @@ def keep_result_menu_keyboard() -> list[list[dict]]:
 
 def calc_result_keyboard(order_id: int) -> list[list[dict]]:
     return [
-        [{"type": "callback", "text": "✏️ Другая ставка водителя", "payload": f"calc:recalc:{order_id}", "intent": "default"}],
+        [{"type": "callback", "text": "✏️ Другая ставка перевозчика", "payload": f"calc:recalc:{order_id}", "intent": "default"}],
         [{"type": "callback", "text": "← В меню", "payload": "screen:home_new", "intent": "default"}],
     ]
 
@@ -68,7 +68,7 @@ def admin_keyboard(free_beta: bool = True) -> list[list[dict]]:
     return [
         [
             {"type": "callback", "text": "📊 Сводка", "payload": "admin:stats", "intent": "default"},
-            {"type": "callback", "text": "⚠️ Ошибки парсера", "payload": "admin:fails", "intent": "default"},
+            {"type": "callback", "text": "⚠️ Нераспознанные заявки", "payload": "admin:fails", "intent": "default"},
         ],
         [{"type": "callback", "text": action_label, "payload": "admin:toggle_beta", "intent": "default"}],
         [
