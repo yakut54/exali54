@@ -48,7 +48,7 @@ def _looks_like_order(text: str, in_dist_mode: bool = False) -> bool:
             bool(re.search(r"\b(км|километр|расстояни|пробег)\b", text.lower())))
 
 
-def _short_known_route(text: str) -> tuple[str, str] | None:
+def extract_two_cities(text: str) -> tuple[str, str] | None:
     words = text.strip().split()
     if len(words) < 2 or len(words) > 6:
         return None
@@ -60,6 +60,12 @@ def _short_known_route(text: str) -> tuple[str, str] | None:
         ]
         if all(key in CITY_ALIASES or key in CITY_NORM_MAP for key in keys):
             return normalize_city_name(left), normalize_city_name(right)
+    if re.search(r"\d", text):
+        prefix = text[:re.search(r"\d", text).start()]
+        words = [word.strip(" ,;:-") for word in prefix.split()
+                 if word.lower() not in {"из", "в", "до", "от", "на", "по"}]
+        if len(words) == 2 and all(words):
+            return normalize_city_name(words[0]), normalize_city_name(words[1])
     return None
 
 
@@ -94,7 +100,7 @@ async def parse_order_text(text: str, in_dist_mode: bool = False) -> ParsedOrder
     if not _looks_like_order(text, in_dist_mode):
         return None
     if not re.search(r"\d", text):
-        route = _short_known_route(text)
+        route = extract_two_cities(text)
         if route:
             distance = await get_road_distance_km(*route)
             return ParsedOrder(
@@ -133,6 +139,10 @@ async def parse_order_text(text: str, in_dist_mode: bool = False) -> ParsedOrder
         weight_t = None
     from_city = data.get("from_city") if isinstance(data.get("from_city"), str) else None
     to_city = data.get("to_city") if isinstance(data.get("to_city"), str) else None
+    fallback_route = extract_two_cities(text)
+    if fallback_route:
+        from_city = from_city or fallback_route[0]
+        to_city = to_city or fallback_route[1]
     distance = await get_road_distance_km(from_city, to_city) if from_city and to_city else None
     distance_km = distance[0] if distance else None
     c_type = data.get("client_rate_type") if data.get("client_rate_type") in ("total", "per_ton", "per_km") else "total"
