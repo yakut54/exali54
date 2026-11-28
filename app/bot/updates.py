@@ -63,3 +63,25 @@ async def edit_or_send(
         await save_last_mid(user_id, mid, text)
         return
     await send_fresh_menu(chat_id, user_id, text, buttons, max_client)
+
+
+def extract_image_urls(payload: dict) -> list[str]:
+    msg = payload.get("message")
+    body = msg.get("body") if isinstance(msg, dict) else None
+    attachments = body.get("attachments") if isinstance(body, dict) else None
+    urls: list[str] = []
+    for att in attachments or []:
+        if isinstance(att, dict) and att.get("type") == "image" and isinstance(att.get("payload"), dict):
+            url = att["payload"].get("url")
+            if isinstance(url, str) and url:
+                urls.append(url)
+    return urls
+
+
+def extract_start_payload(payload: dict) -> str:
+    if payload.get("update_type") == "bot_started":
+        return str(payload.get("payload") or "").strip()
+    _, text = extract_msg_body(payload)
+    if text.startswith("/start "):
+        return text.removeprefix("/start ").strip()
+    return ""

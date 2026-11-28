@@ -2,12 +2,13 @@ import asyncio
 import logging
 
 from bot.client import MaxClient
-from bot.keyboards import back_to_home_keyboard, main_menu_keyboard, tax_modes_keyboard
+from bot.keyboards import back_to_home_keyboard, keep_result_menu_keyboard, main_menu_keyboard, tax_modes_keyboard
 from bot.screens import screen_text
-from bot.updates import edit_or_send, extract_chat_id, extract_msg_body, extract_user_id, send_fresh_menu
+from bot.updates import edit_or_send, extract_chat_id, extract_image_urls, extract_msg_body, extract_start_payload, extract_user_id, send_fresh_menu
 from services.calc_flow import build_calc_reply
 from services.inn_flow import build_inn_reply, is_inn_text, is_order_text
 from services.orders import clear_user_state, get_user_state, save_last_mid, set_user_state
+from services.ttn_flow import finish_driver_ttn, handle_driver_photos, handle_driver_start, start_ttn_for_logist
 from services.users import TAX_LABELS, get_or_create_user, set_user_tax_mode
 
 logger = logging.getLogger("max-bot.handlers")
@@ -29,8 +30,7 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
         toast = f"✅ {TAX_LABELS.get(data.removeprefix('tax:'), '')}" if data.startswith("tax:") else "⏳"
         asyncio.create_task(max_client.answer_callback(cb_id, notification=toast))
 
-    user = await get_or_create_user(user_id)
-    tax = user["tax_mode"]
+    tax = (await get_or_create_user(user_id))["tax_mode"]
 
     if data == "screen:home_new":
         await clear_user_state(user_id)
@@ -55,7 +55,12 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
     elif data == "screen:inn":
         await set_user_state(user_id, "wait_inn")
         await edit_or_send(chat_id, user_id, mid, screen_text("inn", tax), back_to_home_keyboard(), max_client)
-    elif data in ("screen:calc", "screen:ttn"):
+    elif data == "screen:ttn":
+        reply, kb = await start_ttn_for_logist(user_id, chat_id, max_client.bot_username)
+        await send_fresh_menu(chat_id, user_id, reply, kb, max_client)
+    elif data == "ttn:done" and (st := await get_user_state(user_id) or {}).get("state") == "wait_ttn_photo" and st.get("order_id"):
+        await send_fresh_menu(chat_id, user_id, await finish_driver_ttn(user_id, st["order_id"], max_client), keep_result_menu_keyboard(), max_client)
+    elif data == "screen:calc":
         await clear_user_state(user_id)
         scr = data.removeprefix("screen:")
         await edit_or_send(chat_id, user_id, mid, screen_text(scr, tax), back_to_home_keyboard(), max_client)
@@ -67,22 +72,23 @@ async def handle_update(payload: dict, max_client: MaxClient) -> None:
         cid, uid = extract_chat_id(payload), extract_user_id(payload)
         if uid is not None:
             await clear_user_state(uid)
-            user = await get_or_create_user(uid)
-            await send_fresh_menu(cid, uid, screen_text("home", user["tax_mode"]), main_menu_keyboard(), max_client, direct_uid=uid)
+            reply = await handle_driver_start(uid, extract_start_payload(payload))
+            tax = (await get_or_create_user(uid))["tax_mode"]
+            await send_fresh_menu(cid, uid, reply or screen_text("home", tax), [] if reply else main_menu_keyboard(), max_client, direct_uid=uid)
     elif update_type == "message_callback":
         await _handle_callback(payload, max_client)
     elif update_type == "message_created":
         cid, uid = extract_chat_id(payload), extract_user_id(payload)
         if cid is None or uid is None:
             return
-        user = await get_or_create_user(uid)
-        tax = user["tax_mode"]
+        tax = (await get_or_create_user(uid))["tax_mode"]
         _, raw_text = extract_msg_body(payload)
         lower = raw_text.lower()
 
         if lower.startswith("/start"):
             await clear_user_state(uid)
-            await send_fresh_menu(cid, uid, screen_text("home", tax), main_menu_keyboard(), max_client)
+            reply = await handle_driver_start(uid, extract_start_payload(payload))
+            await send_fresh_menu(cid, uid, reply or screen_text("home", tax), [] if reply else main_menu_keyboard(), max_client)
         elif lower.startswith("/tax"):
             await clear_user_state(uid)
             await send_fresh_menu(cid, uid, screen_text("tax", tax), tax_modes_keyboard(tax), max_client)
@@ -92,13 +98,15 @@ async def handle_update(payload: dict, max_client: MaxClient) -> None:
         elif lower.startswith("/calc"):
             await clear_user_state(uid)
             await send_fresh_menu(cid, uid, screen_text("calc", tax), back_to_home_keyboard(), max_client)
+        elif (st := await get_user_state(uid) or {}).get("state") == "wait_ttn_photo" and st.get("order_id"):
+            reply, kb = await handle_driver_photos(uid, st["order_id"], extract_image_urls(payload), max_client)
+            await send_fresh_menu(cid, uid, reply, kb, max_client)
         elif raw_text:
-            state = (await get_user_state(uid) or {}).get("state")
-            if state == "wait_inn" and is_order_text(raw_text):
+            if st.get("state") == "wait_inn" and is_order_text(raw_text):
                 await clear_user_state(uid)
                 reply_text, kb = await build_calc_reply(uid, raw_text, tax)
-            elif state == "wait_inn" or is_inn_text(raw_text):
-                if state == "wait_inn":
+            elif st.get("state") == "wait_inn" or is_inn_text(raw_text):
+                if st.get("state") == "wait_inn":
                     await clear_user_state(uid)
                 reply_text, kb = await build_inn_reply(raw_text)
             else:

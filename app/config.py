@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
     DADATA_API_KEY: str = ""
     DADATA_INN_URL: str = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party"
+    MAX_BOT_USERNAME: str = ""
+    TTN_STORAGE_DIR: str = "/data/ttn"
 
 
 settings = Settings()

@@ -23,6 +23,7 @@ class MaxClient:
             headers={"Authorization": settings.MAX_BOT_TOKEN},
             timeout=30.0,
         )
+        self.bot_username: str = settings.MAX_BOT_USERNAME
 
     def _build_body(self, text: str, buttons: list[list[dict]] | None) -> dict:
         body: dict = {"text": text, "format": "markdown"}
@@ -116,7 +117,29 @@ class MaxClient:
                 await self.delete_subscription(old_url)
         result = await self.set_webhook(url, secret)
         await self.set_commands()
+        me = await self._client.get("/me")
+        if me.is_success and isinstance((data := me.json()), dict) and isinstance(data.get("username"), str) and not settings.MAX_BOT_USERNAME:
+            self.bot_username = data["username"]
         return result
+
+    async def download_file(self, url: str) -> bytes:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as dl:
+            (response := await dl.get(url)).raise_for_status()
+        return response.content
+
+    async def send_document(
+        self, chat_id: int, filename: str, file_bytes: bytes, caption: str = "", buttons: list[list[dict]] | None = None
+    ) -> dict:
+        upload = await self._client.post("/uploads", params={"type": "file"})
+        upload.raise_for_status()
+        uploaded = await self._client.post(upload.json()["url"], files={"data": (filename, file_bytes, "application/pdf")})
+        uploaded.raise_for_status()
+        attachments: list[dict] = [{"type": "file", "payload": {"token": uploaded.json()["token"]}}]
+        if buttons:
+            attachments.append({"type": "inline_keyboard", "payload": {"buttons": buttons}})
+        response = await self._client.post("/messages", params={"chat_id": chat_id}, json={"text": caption, "format": "markdown", "attachments": attachments})
+        response.raise_for_status()
+        return response.json()
 
     async def aclose(self) -> None:
         await self._client.aclose()

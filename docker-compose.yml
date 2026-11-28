@@ -19,6 +19,8 @@ services:
     env_file: .env
     environment:
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+    volumes:
+      - ttn_data:/data/ttn
     depends_on:
       db:
         condition: service_healthy
@@ -40,4 +42,5 @@ volumes:
   pgdata:
   caddy_data:
   caddy_config:
+  ttn_data:
 

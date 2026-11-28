@@ -42,3 +42,7 @@ def back_to_home_keyboard() -> list[list[dict]]:
 
 def keep_result_menu_keyboard() -> list[list[dict]]:
     return [[{"type": "callback", "text": "← В меню", "payload": "screen:home_new", "intent": "default"}]]
+
+
+def ttn_driver_keyboard() -> list[list[dict]]:
+    return [[{"type": "callback", "text": "✅ Готово (отправить PDF логисту)", "payload": "ttn:done", "intent": "positive"}]]

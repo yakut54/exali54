@@ -53,6 +53,25 @@ CREATE TABLE IF NOT EXISTS inn_cache (
     payload JSONB NOT NULL,
     fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS shipments (
+    id SERIAL PRIMARY KEY,
+    token VARCHAR(32) UNIQUE NOT NULL,
+    logist_user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    logist_chat_id BIGINT NOT NULL,
+    driver_user_id BIGINT,
+    status VARCHAR(24) NOT NULL DEFAULT 'waiting',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS shipment_pages (
+    id SERIAL PRIMARY KEY,
+    shipment_id INT NOT NULL REFERENCES shipments(id) ON DELETE CASCADE,
+    page_num INT NOT NULL,
+    file_path TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (shipment_id, page_num)
+);
 """
 
 
