@@ -72,7 +72,6 @@ async def finish_driver_ttn(driver_uid: int, shipment_id: int, max_client: MaxCl
         f"TTN_{shipment['token']}.pdf",
         pdf_bytes,
         caption=f"📄 **ТТН по рейсу `{shipment['token']}` готовы!**",
-        buttons=keep_result_menu_keyboard(),
     )
     await mark_shipment_completed(shipment_id)
     await clear_user_state(driver_uid)
