@@ -44,5 +44,23 @@ def keep_result_menu_keyboard() -> list[list[dict]]:
     return [[{"type": "callback", "text": "← В меню", "payload": "screen:home_new", "intent": "default"}]]
 
 
+def calc_result_keyboard(order_id: int) -> list[list[dict]]:
+    return [
+        [{"type": "callback", "text": "✏️ Другая ставка водителя", "payload": f"calc:recalc:{order_id}", "intent": "default"}],
+        [{"type": "callback", "text": "← В меню", "payload": "screen:home_new", "intent": "default"}],
+    ]
+
+
 def ttn_driver_keyboard() -> list[list[dict]]:
     return [[{"type": "callback", "text": "✅ Готово (отправить PDF логисту)", "payload": "ttn:done", "intent": "positive"}]]
+
+
+def admin_keyboard() -> list[list[dict]]:
+    return [
+        [
+            {"type": "callback", "text": "📊 Сводка", "payload": "admin:stats", "intent": "default"},
+            {"type": "callback", "text": "⚠️ Ошибки парсера", "payload": "admin:fails", "intent": "default"},
+        ],
+        [{"type": "callback", "text": "📢 Рассылка", "payload": "admin:broadcast", "intent": "default"}],
+        [{"type": "callback", "text": "← В меню", "payload": "screen:home_new", "intent": "default"}],
+    ]

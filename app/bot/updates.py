@@ -1,7 +1,9 @@
 import asyncio
 
 from bot.client import MaxClient
-from services.orders import get_user_state, save_last_mid
+from bot.keyboards import main_menu_keyboard
+from bot.screens import screen_text
+from services.orders import clear_user_state, get_user_state, save_last_mid
 
 
 def as_int(value) -> int | None:
@@ -54,6 +56,18 @@ async def send_fresh_menu(
     new_mid = ((resp.get("message") or {}).get("body") or {}).get("mid") if isinstance(resp, dict) else None
     if isinstance(new_mid, str) and new_mid:
         await save_last_mid(user_id, new_mid, text)
+
+
+async def send_home_screen(
+    chat_id: int | None, user_id: int, mid: str | None, old_text: str, tax_mode: str, max_client: MaxClient
+) -> None:
+    await clear_user_state(user_id)
+    if mid and old_text:
+        asyncio.create_task(max_client.edit_message(mid, old_text, buttons=[]))
+    text = screen_text("home", tax_mode)
+    resp = await max_client.send_message(chat_id, text, buttons=main_menu_keyboard())
+    new_mid = ((resp.get("message") or {}).get("body") or {}).get("mid") if isinstance(resp, dict) else None
+    await save_last_mid(user_id, new_mid, text)
 
 
 async def edit_or_send(

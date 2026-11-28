@@ -1,17 +1,16 @@
 import asyncio
-import logging
 
 from bot.client import MaxClient
-from bot.keyboards import back_to_home_keyboard, keep_result_menu_keyboard, main_menu_keyboard, tax_modes_keyboard
+from bot.keyboards import admin_keyboard, back_to_home_keyboard, keep_result_menu_keyboard, main_menu_keyboard, tax_modes_keyboard
 from bot.screens import screen_text
-from bot.updates import edit_or_send, extract_chat_id, extract_image_urls, extract_msg_body, extract_start_payload, extract_user_id, send_fresh_menu
-from services.calc_flow import build_calc_reply
+from bot.updates import edit_or_send, extract_chat_id, extract_image_urls, extract_msg_body, extract_start_payload, extract_user_id, send_fresh_menu, send_home_screen
+from config import settings
+from services.admin import ADMIN_PANEL_TEXT, admin_callback, run_broadcast
+from services.calc_flow import build_calc_reply, start_recalc_carrier
 from services.inn_flow import build_inn_reply, is_inn_text, is_order_text
-from services.orders import clear_user_state, get_user_state, save_last_mid, set_user_state
+from services.orders import clear_user_state, get_user_state, set_user_state
 from services.ttn_flow import finish_driver_ttn, handle_driver_photos, handle_driver_start, start_ttn_for_logist
 from services.users import TAX_LABELS, get_or_create_user, set_user_tax_mode
-
-logger = logging.getLogger("max-bot.handlers")
 
 
 async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
@@ -33,25 +32,18 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
     tax = (await get_or_create_user(user_id))["tax_mode"]
 
     if data == "screen:home_new":
+        await send_home_screen(chat_id, user_id, mid, old_text, tax, max_client)
+    elif data in ("screen:home", "screen:calc"):
         await clear_user_state(user_id)
-        if mid and old_text:
-            asyncio.create_task(max_client.edit_message(mid, old_text, buttons=[]))
-        home_txt = screen_text("home", tax)
-        resp = await max_client.send_message(chat_id, home_txt, buttons=main_menu_keyboard())
-        new_mid = ((resp.get("message") or {}).get("body") or {}).get("mid") if isinstance(resp, dict) else None
-        await save_last_mid(user_id, new_mid, home_txt)
-    elif data == "screen:home":
-        await clear_user_state(user_id)
-        await edit_or_send(chat_id, user_id, mid, screen_text("home", tax), main_menu_keyboard(), max_client)
+        kb = main_menu_keyboard() if data == "screen:home" else back_to_home_keyboard()
+        await edit_or_send(chat_id, user_id, mid, screen_text(data.removeprefix("screen:"), tax), kb, max_client)
     elif data == "screen:tax":
         await edit_or_send(chat_id, user_id, mid, screen_text("tax", tax), tax_modes_keyboard(tax), max_client)
     elif data.startswith("tax:"):
         new_tax = data.removeprefix("tax:")
-        try:
+        if new_tax in TAX_LABELS:
             await set_user_tax_mode(user_id, new_tax)
-        except ValueError:
-            return
-        await edit_or_send(chat_id, user_id, mid, screen_text("tax", new_tax), tax_modes_keyboard(new_tax), max_client)
+            await edit_or_send(chat_id, user_id, mid, screen_text("tax", new_tax), tax_modes_keyboard(new_tax), max_client)
     elif data == "screen:inn":
         await set_user_state(user_id, "wait_inn")
         await edit_or_send(chat_id, user_id, mid, screen_text("inn", tax), back_to_home_keyboard(), max_client)
@@ -60,10 +52,11 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
         await send_fresh_menu(chat_id, user_id, reply, kb, max_client)
     elif data == "ttn:done" and (st := await get_user_state(user_id) or {}).get("state") == "wait_ttn_photo" and st.get("order_id"):
         await send_fresh_menu(chat_id, user_id, await finish_driver_ttn(user_id, st["order_id"], max_client), keep_result_menu_keyboard(), max_client)
-    elif data == "screen:calc":
-        await clear_user_state(user_id)
-        scr = data.removeprefix("screen:")
-        await edit_or_send(chat_id, user_id, mid, screen_text(scr, tax), back_to_home_keyboard(), max_client)
+    elif data.startswith("calc:recalc:") and data.removeprefix("calc:recalc:").isdigit():
+        if reply := await start_recalc_carrier(user_id, int(data.removeprefix("calc:recalc:")), tax):
+            await send_fresh_menu(chat_id, user_id, reply, back_to_home_keyboard(), max_client)
+    elif data.startswith("admin:") and user_id == settings.ADMIN_USER_ID:
+        await send_fresh_menu(chat_id, user_id, *(await admin_callback(user_id, data)), max_client)
 
 
 async def handle_update(payload: dict, max_client: MaxClient) -> None:
@@ -98,9 +91,17 @@ async def handle_update(payload: dict, max_client: MaxClient) -> None:
         elif lower.startswith("/calc"):
             await clear_user_state(uid)
             await send_fresh_menu(cid, uid, screen_text("calc", tax), back_to_home_keyboard(), max_client)
+        elif lower.startswith("/admin"):
+            if uid != settings.ADMIN_USER_ID:
+                return
+            await clear_user_state(uid)
+            await send_fresh_menu(cid, uid, ADMIN_PANEL_TEXT, admin_keyboard(), max_client)
         elif (st := await get_user_state(uid) or {}).get("state") == "wait_ttn_photo" and st.get("order_id"):
             reply, kb = await handle_driver_photos(uid, st["order_id"], extract_image_urls(payload), max_client)
             await send_fresh_menu(cid, uid, reply, kb, max_client)
+        elif st.get("state") == "wait_broadcast" and uid == settings.ADMIN_USER_ID and raw_text:
+            await clear_user_state(uid)
+            await send_fresh_menu(cid, uid, await run_broadcast(raw_text, max_client), admin_keyboard(), max_client)
         elif raw_text:
             if st.get("state") == "wait_inn" and is_order_text(raw_text):
                 await clear_user_state(uid)
@@ -108,7 +109,7 @@ async def handle_update(payload: dict, max_client: MaxClient) -> None:
             elif st.get("state") == "wait_inn" or is_inn_text(raw_text):
                 if st.get("state") == "wait_inn":
                     await clear_user_state(uid)
-                reply_text, kb = await build_inn_reply(raw_text)
+                reply_text, kb = await build_inn_reply(uid, raw_text)
             else:
                 reply_text, kb = await build_calc_reply(uid, raw_text, tax)
             await send_fresh_menu(cid, uid, reply_text, kb, max_client)

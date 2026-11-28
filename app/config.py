@@ -20,5 +20,9 @@ class Settings(BaseSettings):
     MAX_BOT_USERNAME: str = ""
     TTN_STORAGE_DIR: str = "/data/ttn"
 
+    ADMIN_USER_ID: int = 68300606
+    DAILY_CALC_LIMIT: int = 50
+    DAILY_INN_LIMIT: int = 20
+
 
 settings = Settings()

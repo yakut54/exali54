@@ -8,8 +8,13 @@ INIT_SQL = """
 CREATE TABLE IF NOT EXISTS users (
     user_id BIGINT PRIMARY KEY,
     tax_mode VARCHAR(32) NOT NULL DEFAULT 'osno_22',
+    inn_daily_count INT NOT NULL DEFAULT 0,
+    inn_daily_date DATE NOT NULL DEFAULT CURRENT_DATE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS inn_daily_count INT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS inn_daily_date DATE NOT NULL DEFAULT CURRENT_DATE;
 
 CREATE TABLE IF NOT EXISTS orders (
     id SERIAL PRIMARY KEY,
@@ -71,6 +76,13 @@ CREATE TABLE IF NOT EXISTS shipment_pages (
     file_path TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (shipment_id, page_num)
+);
+
+CREATE TABLE IF NOT EXISTS parse_failures (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    raw_text TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 """
 
