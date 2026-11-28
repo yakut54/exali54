@@ -47,6 +47,12 @@ CREATE TABLE IF NOT EXISTS user_states (
 
 ALTER TABLE user_states ADD COLUMN IF NOT EXISTS last_mid VARCHAR(128);
 ALTER TABLE user_states ADD COLUMN IF NOT EXISTS last_text TEXT;
+
+CREATE TABLE IF NOT EXISTS inn_cache (
+    inn VARCHAR(12) PRIMARY KEY,
+    payload JSONB NOT NULL,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 

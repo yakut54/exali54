@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     MAX_WEBHOOK_SECRET: str = ""
     DEEPSEEK_API_URL: str = "https://api." + "proxyapi.ru" + "/v1/chat/completions"
     DEEPSEEK_API_KEY: str = ""
+    DADATA_API_KEY: str = ""
+    DADATA_INN_URL: str = "https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party"
 
 
 settings = Settings()

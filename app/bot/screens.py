@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from services.antifraud import InnReport
 from services.calculator import CalcResult
 from services.users import TAX_LABELS
 
@@ -73,4 +74,35 @@ def format_calc_card(
     if notes:
         lines.append("")
         lines.extend(f"⚠️ {n}" for n in notes)
+    return "\n".join(lines)
+
+
+INN_STATUS_LABELS: dict[str, str] = {
+    "ACTIVE": "🟢 Действующая",
+    "LIQUIDATING": "🟡 В стадии ликвидации",
+    "LIQUIDATED": "🔴 Ликвидирована",
+    "BANKRUPT": "🔴 Банкротство",
+    "REORGANIZING": "🟡 Реорганизация",
+}
+
+
+def format_inn_card(report: InnReport) -> str:
+    status = INN_STATUS_LABELS.get(report.status, report.status or "нет данных")
+    lines = [
+        f"**{report.name or 'Наименование не указано'}**",
+        f"ИНН: `{report.inn}`",
+        f"Статус: {status}",
+    ]
+    if report.reg_date:
+        lines.append(f"Дата регистрации: {report.reg_date}")
+    if report.manager:
+        lines.append(f"Руководитель: {report.manager}")
+    if report.okved:
+        lines.append(f"ОКВЭД: {report.okved}")
+    if report.address:
+        lines.append(f"Адрес: {report.address}")
+    note = "Данные ЕГРЮЛ/ЕГРИП на дату проверки"
+    if report.from_cache:
+        note += " (из кэша за 24 ч)"
+    lines.extend(["", f"_{note}_"])
     return "\n".join(lines)
