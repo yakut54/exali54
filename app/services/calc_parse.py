@@ -31,6 +31,20 @@ def pick_client_offer(parsed: ParsedOrder, tax_mode: str) -> tuple[Decimal, bool
     return parsed.client_rate, parsed.client_vat, note
 
 
+def format_cargo_post(order: dict, distance_km: int | None = None) -> str:
+    route = f"🚛 **Груз: {order['route_from'] or 'Откуда'} → {order['route_to'] or 'Куда'}**"
+    if distance_km:
+        route += f" ({distance_km} км)"
+    lines = [route]
+    if order.get("weight_t"):
+        lines.append(f"📦 Тоннаж: {Decimal(str(order['weight_t'])):g} т")
+    if order.get("carrier_rate"):
+        rate = Decimal(str(order["carrier_rate"]))
+        lines.append(f"💰 Ставка перевозчику: **{fmt_money(rate)} ₽** ({vat_tag(order.get('carrier_vat'))})")
+    lines.append("📩 Подробности и погрузка — в ЛС")
+    return "\n".join(lines)
+
+
 def parse_carrier_reply(text: str) -> tuple[Decimal | None, bool | None]:
     if "/" in text or "-" in text or len(text) > 35:
         return None, None

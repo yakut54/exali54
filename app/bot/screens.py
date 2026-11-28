@@ -35,10 +35,11 @@ def screen_text(screen: str, tax_mode: str = "osno_22") -> str:
         )
     if screen == "dist":
         return (
-            "**🛣 Расстояние и ставка за километр**\n"
-            "Напиши маршрут. Если добавишь сумму — посчитаю ставку за километр:\n"
-            "• `Уссурийск Москва` — расстояние по трассе\n"
-            "• `Уссурийск Москва 750 тыс наличкой` — сумма и ставка с НДС и без НДС"
+            "**🛣 Расстояние и ₽/км**\n"
+            "Укажи маршрут:\n"
+            "• `Уссурийск — Москва` — покажу расстояние по трассе\n"
+            "• `Уссурийск — Москва 750 тыс наличными` — "
+            "покажу эквивалент в ₽/км с НДС и без НДС"
         )
     if screen == "inn":
         return "**🛡 Проверка ИНН**\nПришли 10 или 12 цифр ИНН контрагента."
@@ -77,7 +78,7 @@ def format_calc_card(
     if res.carrier_with_vat_eq is not None:
         lines.append(f"⚖️ Ставка перевозчика с НДС: **{fmt_money(res.carrier_with_vat_eq)} ₽**")
     if res.platon_hint is not None:
-        lines.append(f"🛣 Платон за подачу: примерно **{fmt_money(res.platon_hint)} ₽**")
+        lines.append(f"🛣 Платон (от 12 т, ~75% фед. трасс): ~**{fmt_money(res.platon_hint)} ₽**")
 
     notes = ([res.warning] if res.warning else []) + extra_notes
     if carrier_vat is None and res.tax_mode == "osno_22":
@@ -110,10 +111,12 @@ def format_inn_card(report: InnReport) -> str:
         lines.append(f"Руководитель: {report.manager}")
     if report.okved:
         lines.append(f"ОКВЭД: {report.okved}")
+        profile = "✅ Грузоперевозки и экспедирование" if report.okved.startswith(("49.41", "49.42", "52.29", "52.10", "52.21")) else "⚠️ Непрофильный ОКВЭД — проверь договор"
+        lines.append(f"Профиль: {profile}")
     if report.address:
         lines.append(f"Адрес: {report.address}")
     note = "Данные ЕГРЮЛ/ЕГРИП на дату проверки"
     if report.from_cache:
         note += " (из кэша за 24 ч)"
-    lines.extend(["", f"_{note}_"])
+    lines.extend(["", f"_{note}_", "Реестр экспедиторов ГосЛог: https://sicmt.ru"])
     return "\n".join(lines)

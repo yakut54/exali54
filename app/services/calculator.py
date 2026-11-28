@@ -7,7 +7,7 @@ USN_6_RATE = Decimal("0.06")
 USN_15_RATE = Decimal("0.15")
 USN_MIN_TAX_RATE = Decimal("0.01")
 USN_VAT_5_DIVISOR = Decimal("105")
-PLATON_RATE_PER_KM = Decimal("3.34")
+PLATON_RATE_PER_KM = Decimal("5.19")
 PLATON_FED_SHARE = Decimal("0.75")
 TWO_PLACES = Decimal("0.01")
 
@@ -52,6 +52,7 @@ def calculate_margin(
     carrier_vat: bool = False,
     weight_t: Decimal | None = None,
     deadhead_km: Decimal | None = None,
+    route_km: int | None = None,
 ) -> CalcResult:
     if client_rate <= 0 or carrier_rate < 0:
         raise ValueError("Ставка клиента должна быть больше нуля, ставка перевозчика — не меньше нуля.")
@@ -111,8 +112,10 @@ def calculate_margin(
     margin_pct = (net_profit / client_rate) * Decimal("100")
 
     platon_hint: Decimal | None = None
-    if weight_t is not None and weight_t >= Decimal("12") and deadhead_km and deadhead_km > 0:
-        platon_hint = _r2(deadhead_km * PLATON_FED_SHARE * PLATON_RATE_PER_KM)
+    if weight_t is not None and weight_t >= Decimal("12"):
+        total_km = Decimal(route_km or 0) + (deadhead_km or Decimal("0"))
+        if total_km > 0:
+            platon_hint = _r2(total_km * PLATON_FED_SHARE * PLATON_RATE_PER_KM)
 
     return CalcResult(
         tax_mode=tax_mode,

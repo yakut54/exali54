@@ -35,10 +35,10 @@ async def build_calc_reply(
                 c_vat = bool(order["client_vat"]) if order["client_vat"] is not None else (tax_mode in ("osno_22", "usn_5_nds"))
                 w_t = Decimal(str(order["weight_t"])) if order.get("weight_t") is not None else None
                 d_km = Decimal(str(order["deadhead_km"])) if order.get("deadhead_km") is not None else None
-                res = calculate_margin(tax_mode, c_rate, carrier_rate, client_vat=c_vat, carrier_vat=bool(carrier_vat), weight_t=w_t, deadhead_km=d_km)
+                dist = await get_road_distance_km(order["route_from"], order["route_to"])
+                res = calculate_margin(tax_mode, c_rate, carrier_rate, client_vat=c_vat, carrier_vat=bool(carrier_vat), weight_t=w_t, deadhead_km=d_km, route_km=dist[0] if dist else None)
                 await complete_order_carrier(order["id"], carrier_rate, carrier_vat, res.net_profit)
                 await clear_user_state(user_id)
-                dist = await get_road_distance_km(order["route_from"], order["route_to"])
                 card = format_calc_card(order["route_from"], order["route_to"], w_t, res, order["client_vat"], carrier_vat, [], dist[0] if dist else None, dist[1] if dist else False)
                 return card, calc_result_keyboard(order["id"])
         await clear_user_state(user_id)
@@ -101,7 +101,7 @@ async def build_calc_reply(
             lines.extend(["", *(f"⚠️ {n}" for n in extra_notes)])
         return "\n".join(lines), keep_result_menu_keyboard()
 
-    res = calculate_margin(tax_mode, client_rate, parsed.carrier_rate, client_vat=c_vat_eff, carrier_vat=bool(parsed.carrier_vat), weight_t=parsed.weight_t, deadhead_km=parsed.deadhead_km)
+    res = calculate_margin(tax_mode, client_rate, parsed.carrier_rate, client_vat=c_vat_eff, carrier_vat=bool(parsed.carrier_vat), weight_t=parsed.weight_t, deadhead_km=parsed.deadhead_km, route_km=dist[0] if dist else None)
     order_id = await create_order(user_id, raw_text, parsed, client_rate, client_vat, margin=res.net_profit, status="calculated")
     card = format_calc_card(parsed.from_city, parsed.to_city, parsed.weight_t, res, client_vat, parsed.carrier_vat, extra_notes, dist[0] if dist else None, dist[1] if dist else False)
     return card, calc_result_keyboard(order_id)
