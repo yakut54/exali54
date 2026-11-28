@@ -3,6 +3,8 @@ import logging
 
 from bot.client import MaxClient
 from bot.keyboards import back_to_home_keyboard, main_menu_keyboard, tax_modes_keyboard
+from services.calc_flow import handle_calc_text
+from services.orders import clear_user_state
 from services.users import TAX_LABELS, get_or_create_user, set_user_tax_mode
 
 logger = logging.getLogger("max-bot.handlers")
@@ -55,9 +57,9 @@ def _extract_text(payload: dict) -> str:
 def _home_text(tax_mode: str) -> str:
     tax_name = TAX_LABELS.get(tax_mode, tax_mode)
     return (
-        "**🚛 Ехали! • Ассистент логиста**\n"
+        "**🚚 Ехали! • Ассистент логиста**\n"
         f"Налог: **{tax_name}**\n\n"
-        "Пришли параметры рейса или выбери инструмент:"
+        "Пришли параметры рейса (или перешли пост из чата) либо выбери инструмент:"
     )
 
 
@@ -90,6 +92,7 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
     user = await get_or_create_user(user_id)
 
     if data == "screen:home":
+        await clear_user_state(user_id)
         await _render_screen(chat_id, mid, _home_text(user["tax_mode"]), main_menu_keyboard(), max_client)
     elif data == "screen:tax":
         text = f"**⚙️ Система налогообложения**\nСейчас: **{TAX_LABELS.get(user['tax_mode'], user['tax_mode'])}**"
@@ -103,16 +106,19 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
         text = f"**⚙️ Система налогообложения**\nСейчас: **{TAX_LABELS[tax_mode]}**"
         await _render_screen(chat_id, mid, text, tax_modes_keyboard(tax_mode), max_client)
     elif data == "screen:calc":
+        await clear_user_state(user_id)
         text = (
             "**🧮 Стоп-цена и маржа**\n"
-            "Напиши рейс одной строкой:\n"
+            "Напиши рейс одной строкой или перешли пост с грузом:\n"
             "`нск омск 20т 140 с ндс / 100 ип подача 40`"
         )
         await _render_screen(chat_id, mid, text, back_to_home_keyboard(), max_client)
     elif data == "screen:inn":
+        await clear_user_state(user_id)
         text = "**🛡 Проверка ИНН**\nОтправь `10` или `12` цифр ИНН контрагента:"
         await _render_screen(chat_id, mid, text, back_to_home_keyboard(), max_client)
     elif data == "screen:ttn":
+        await clear_user_state(user_id)
         text = "**📄 Сбор ТТН**\nСоздание ссылки для водителя (скоро)"
         await _render_screen(chat_id, mid, text, back_to_home_keyboard(), max_client)
 
@@ -122,6 +128,7 @@ async def handle_update(payload: dict, max_client: MaxClient) -> None:
     if update_type in ("bot_started", "message_removed", "dialog_cleared"):
         cid, uid = _extract_chat_id(payload), _extract_user_id(payload)
         if uid is not None:
+            await clear_user_state(uid)
             user = await get_or_create_user(uid)
             await max_client.send_message(
                 cid, _home_text(user["tax_mode"]), buttons=main_menu_keyboard(), user_id=uid
@@ -133,16 +140,23 @@ async def handle_update(payload: dict, max_client: MaxClient) -> None:
         if cid is None or uid is None:
             return
         user = await get_or_create_user(uid)
-        text = _extract_text(payload).lower()
+        raw_text = _extract_text(payload)
+        lower = raw_text.lower()
 
-        if text.startswith("/tax"):
+        if lower.startswith("/start"):
+            await clear_user_state(uid)
+            await max_client.send_message(cid, _home_text(user["tax_mode"]), buttons=main_menu_keyboard())
+        elif lower.startswith("/tax"):
+            await clear_user_state(uid)
             msg = f"**⚙️ Система налогообложения**\nСейчас: **{TAX_LABELS.get(user['tax_mode'], user['tax_mode'])}**"
             await max_client.send_message(cid, msg, buttons=tax_modes_keyboard(user["tax_mode"]))
-        elif text.startswith("/calc"):
-            msg = "**🧮 Стоп-цена и маржа**\nНапиши рейс одной строкой:\n`нск омск 20т 140 с ндс / 100 ип подача 40`"
+        elif lower.startswith("/calc"):
+            await clear_user_state(uid)
+            msg = "**🧮 Стоп-цена и маржа**\nНапиши рейс одной строкой или перешли пост с грузом:\n`нск омск 20т 140 с ндс / 100 ип подача 40`"
             await max_client.send_message(cid, msg, buttons=back_to_home_keyboard())
-        elif text.startswith("/inn"):
+        elif lower.startswith("/inn"):
+            await clear_user_state(uid)
             msg = "**🛡 Проверка ИНН**\nОтправь `10` или `12` цифр ИНН контрагента:"
             await max_client.send_message(cid, msg, buttons=back_to_home_keyboard())
-        else:
-            await max_client.send_message(cid, _home_text(user["tax_mode"]), buttons=main_menu_keyboard())
+        elif raw_text:
+            await handle_calc_text(cid, uid, raw_text, user["tax_mode"], max_client)
