@@ -11,11 +11,10 @@ from services.orders import (
     create_order,
     get_order,
     get_user_state,
-    is_calc_limit_exceeded,
-    log_parse_failure,
     set_user_state,
 )
 from services.parser import parse_order_text
+from services.users import is_calc_limit_exceeded, log_parse_failure
 
 
 async def build_calc_reply(user_id: int, raw_text: str, tax_mode: str) -> tuple[str, list[list[dict]]]:
