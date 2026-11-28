@@ -6,7 +6,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 import httpx
 from config import settings
-from services.distance import CITY_ALIASES, get_road_distance_km
+from services.cities_dict import CITY_ALIASES, has_known_cities
+from services.distance import get_road_distance_km
 logger = logging.getLogger("max-bot.parser")
 _PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "order_parser.txt"
 SYSTEM_PROMPT = _PROMPT_PATH.read_text(encoding="utf-8").strip()
@@ -41,7 +42,10 @@ def _looks_like_order(text: str, in_dist_mode: bool = False) -> bool:
     parts = text.lower().split()
     cities_only = re.fullmatch(r"[А-ЯЁ][а-яё-]+[ -]+[А-ЯЁ][а-яё-]+", text.strip())
     short_route = len(parts) == 2 and all(part in CITY_ALIASES for part in parts)
-    return bool(numbers) or bool(cities_only) or short_route or bool(re.search(r"\b(км|километр|расстояни|пробег)\b", text.lower()))
+    phrase_route = bool(re.fullmatch(r"[а-яё-]+(?:\s+[а-яё-]+){1,6}", text.lower().strip()))
+    return (bool(numbers) or has_known_cities(text) or bool(cities_only) or short_route or
+            (phrase_route and not re.search(r"\b(и|или|от|до|на|из|в)\b", text.lower())) or
+            bool(re.search(r"\b(км|километр|расстояни|пробег)\b", text.lower())))
 def _to_decimal(val) -> Decimal | None:
     if val is None or isinstance(val, bool):
         return None
