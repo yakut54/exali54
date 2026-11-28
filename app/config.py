@@ -9,10 +9,11 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "botdb"
     DATABASE_URL: str = "postgresql://botuser:botpassword@db:5432/botdb"
 
-    MAX_API_URL: str = "https://platform-api2.max.ru"
+    MAX_API_URL: str = "https://max.ru"
     MAX_BOT_TOKEN: str = ""
-    MAX_WEBHOOK_URL: str = "https://exali54.ru/webhook"
+    MAX_WEBHOOK_URL: str = "https://exali54.ru"
     MAX_WEBHOOK_SECRET: str = ""
+    DEEPSEEK_API_URL: str = "https://proxyapi.ru"
     DEEPSEEK_API_KEY: str = ""
 
 

@@ -3,6 +3,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
 import httpx
 
@@ -10,37 +11,8 @@ from config import settings
 
 logger = logging.getLogger("max-bot.parser")
 
-DEEPSEEK_API_URL = "https://api.proxyapi.ru/v1/chat/completions"
-
-SYSTEM_PROMPT = (
-    "Ты строгий парсер заявок автомобильной грузоперевозок в РФ. Верни ТОЛЬКО валидный JSON без markdown и пояснений:\n"
-    '{"from_city": str|null, "to_city": str|null, "weight_t": number|null, "rate_type": "total"|"per_ton"|"per_km", '
-    '"client_rate_raw": number|null, "client_vat": bool|null, "carrier_rate_raw": number|null, "carrier_vat": bool|null, '
-    '"deadhead_km": number|null, "warnings": list[str]}\n'
-    "Правила извлечения:\n"
-    "1) МАРШРУТ: Города и коды регионов приводи к полному названию (нск, новосиб, 54 -> Новосибирск; 55 -> Омск; "
-    "екб, 66 -> Екатеринбург; челяба, 74 -> Челябинск; мск, 77 -> Москва; спб, питер, 78 -> Санкт-Петербург; "
-    "крск, 24 -> Красноярск; ирк, 38 -> Иркутск; тюмень, 72 -> Тюмень; барнаул, 22 -> Барнаул; "
-    "кемерово, 42 -> Кемерово; томск, 70 -> Томск; крд, 23 -> Краснодар; рнд, 61 -> Ростов-на-Дону; "
-    "кзн, 16 -> Казань; нн, нижний, 52 -> Нижний Новгород; самара, 63 -> Самара; уфа, 02 -> Уфа; "
-    "пермь, 59 -> Пермь; врн, 36 -> Воронеж; влг, 34 -> Волгоград; хбк, 27 -> Хабаровск; влд, 25 -> Владивосток). "
-    "Складские зоны в скобках отбрасывай (МСК (Шушары) -> Москва). При кругорейсе (А - Б - А) to_city = Б.\n"
-    "2) ВЕС (weight_t, в тоннах): фура, двадцатка, 20т, реф, тент, борт, шаланда -> 20; десятитонник, 10т -> 10; "
-    "пятитонник, 5т -> 5; трехтонник, 3т -> 3; газель, полуторка -> 1.5. Кг переводи в тонны (500 кг -> 0.5). "
-    "ИГНОРИРУЙ габариты кузова (13.6м, 82м3, 86 куб, 92, 120 куб), даты (28.11) и телефоны.\n"
-    "3) СТАВКИ И ТИП: Если цена за тонну (р/т, за тонну) -> rate_type='per_ton'; за км (р/км) -> 'per_km'; иначе -> 'total'. "
-    "Маркеры заказчика (client_rate_raw): вход, заказчик, дают, платит, нам, ставка. "
-    "Маркеры перевозчика (carrier_rate_raw): выход, отдаю, отдам, перевоз, водителю, на руки. "
-    "Если маркеров нет и даны 2 числа через /, -, на (140/100): первое = client_rate_raw, второе = carrier_rate_raw. "
-    "ВАЖНО: если даны две ставки для ОДНОЙ стороны с разным НДС (например: 'заказчик 140 с ндс / 125 без ндс'), "
-    "бери первый вариант в client_rate_raw, carrier_rate_raw = null, а в warnings добавь 'Указана вилка ставок по НДС'. "
-    "Если оплата перевозчику разбита на части ('70 б/н + 30 на карту') -> суммируй (100), carrier_vat = false, в warnings напиши 'Комбинированная оплата'.\n"
-    "4) ЧИСЛА: Убирай 'к', 'тыс', 'тр', 'руб', 'р', запятую меняй на точку, НЕ умножай на 1000 (140,5к -> 140.5; 140000 -> 140000). Налоги сам не считай.\n"
-    "5) НДС: с ндс, ндс, +ндс, эндээс, осно -> true; без ндс, б/н без ндс, ип, усн, нал, на карту -> false; не указано -> null. "
-    "Если НДС указан один раз в конце пары ('140 / 100 с ндс'), примени к обеим ставкам.\n"
-    "6) ПОДАЧА (deadhead_km): Только километры ('подача 40', 'холостой 40км', 'подгон 40' -> 40). "
-    "Если подача в рублях ('подача 5к') -> deadhead_km = null, в warnings добавь 'Подача указана в рублях'."
-)
+_PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "order_parser.txt"
+SYSTEM_PROMPT = _PROMPT_PATH.read_text(encoding="utf-8").strip()
 
 
 @dataclass(frozen=True)
@@ -106,12 +78,12 @@ async def parse_order_text(text: str) -> ParsedOrder | None:
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(DEEPSEEK_API_URL, headers=headers, json=body)
+            resp = await client.post(settings.DEEPSEEK_API_URL, headers=headers, json=body)
             resp.raise_for_status()
             choices = resp.json().get("choices") or []
             if not choices:
                 return None
-            content = choices[0].get("message", {}).get("content", "")
+            content = choices.get("message", {}).get("content", "")
             data = json.loads(content)
     except Exception as exc:
         logger.warning("Failed to parse order via LLM: %s", exc)
