@@ -56,13 +56,13 @@ def ttn_driver_keyboard() -> list[list[dict]]:
 
 
 def admin_keyboard(free_beta: bool = True) -> list[list[dict]]:
-    mode_label = "🟢 Режим: Бесплатная бета" if free_beta else "💳 Режим: Платный (триал)"
+    action_label = "💳 Включить платный режим" if free_beta else "🟢 Включить бесплатную бету"
     return [
         [
             {"type": "callback", "text": "📊 Сводка", "payload": "admin:stats", "intent": "default"},
             {"type": "callback", "text": "⚠️ Ошибки парсера", "payload": "admin:fails", "intent": "default"},
         ],
-        [{"type": "callback", "text": mode_label, "payload": "admin:toggle_beta", "intent": "positive" if free_beta else "default"}],
+        [{"type": "callback", "text": action_label, "payload": "admin:toggle_beta", "intent": "default"}],
         [
             {"type": "callback", "text": "📢 Рассылка", "payload": "admin:broadcast", "intent": "default"},
             {"type": "callback", "text": "← В меню", "payload": "screen:home_new", "intent": "default"},
