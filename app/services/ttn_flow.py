@@ -85,8 +85,6 @@ async def handle_driver_photos(
             rejected.append(str(exc))
         except httpx.HTTPError:
             rejected.append("Не удалось скачать фото. Попробуй отправить ещё раз.")
-    if accepted and pending_raw is None:
-        await _remove_pending(driver_uid)
     if pending_raw is not None:
         await _remove_pending(driver_uid)
         await _save_pending(driver_uid, shipment_id, pending_raw)
@@ -99,7 +97,9 @@ async def handle_driver_photos(
     lines = [f"✅ Принято страниц: {len(accepted)} (последняя — лист №{max(accepted)})",
              "Когда все страницы отправлены, нажми «✅ Готово»."]
     lines.extend(f"⚠️ {r}" for r in dict.fromkeys(rejected))
-    return "\n".join(lines), ttn_driver_keyboard()
+    state = await get_user_state(driver_uid)
+    keyboard = ttn_bad_photo_keyboard(True) if state and state.get("pending_photo_path") else ttn_driver_keyboard()
+    return "\n".join(lines), keyboard
 
 
 async def accept_pending_ttn_photo(driver_user_id: int, shipment_id: int) -> tuple[str, list[list[dict]]]:
@@ -135,6 +135,7 @@ async def _page_files(shipment_id: int) -> list[str]:
 
 
 async def finish_driver_ttn(driver_uid: int, shipment_id: int, max_client: MaxClient) -> str:
+    await _remove_pending(driver_uid)
     try:
         paths = await _page_files(shipment_id)
         if not paths:
