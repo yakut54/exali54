@@ -34,14 +34,18 @@ CREATE INDEX IF NOT EXISTS idx_orders_user_created
 
 CREATE TABLE IF NOT EXISTS user_states (
     user_id BIGINT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
-    state VARCHAR(64) NOT NULL,
-    order_id INT REFERENCES orders(id) ON DELETE SET NULL
+    state VARCHAR(64) NOT NULL DEFAULT 'idle',
+    order_id INT REFERENCES orders(id) ON DELETE SET NULL,
+    last_mid VARCHAR(128),
+    last_text TEXT
 );
+
+ALTER TABLE user_states ADD COLUMN IF NOT EXISTS last_mid VARCHAR(128);
+ALTER TABLE user_states ADD COLUMN IF NOT EXISTS last_text TEXT;
 """
 
 
 async def init_db_pool() -> asyncpg.Pool:
-    """Create the global asyncpg connection pool and initialize tables."""
     global _pool
     if _pool is None:
         _pool = await asyncpg.create_pool(dsn=settings.DATABASE_URL, min_size=1, max_size=10)
@@ -51,7 +55,6 @@ async def init_db_pool() -> asyncpg.Pool:
 
 
 async def close_db_pool() -> None:
-    """Close the global asyncpg connection pool if it is open."""
     global _pool
     if _pool is not None:
         await _pool.close()
@@ -59,7 +62,6 @@ async def close_db_pool() -> None:
 
 
 def get_db_pool() -> asyncpg.Pool:
-    """Return the current pool (must be used after init_db_pool)."""
     if _pool is None:
         raise RuntimeError("Database pool is not initialized")
     return _pool

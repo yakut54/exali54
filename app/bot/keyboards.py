@@ -38,3 +38,7 @@ def tax_modes_keyboard(current_mode: str) -> list[list[dict]]:
 
 def back_to_home_keyboard() -> list[list[dict]]:
     return [[{"type": "callback", "text": "← В меню", "payload": "screen:home", "intent": "default"}]]
+
+
+def keep_result_menu_keyboard() -> list[list[dict]]:
+    return [[{"type": "callback", "text": "← В меню", "payload": "screen:home_new", "intent": "default"}]]

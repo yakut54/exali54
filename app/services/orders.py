@@ -25,16 +25,33 @@ async def get_user_state(user_id: int) -> dict | None:
     pool = get_db_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT user_id, state, order_id FROM user_states WHERE user_id = $1",
+            "SELECT user_id, state, order_id, last_mid, last_text FROM user_states WHERE user_id = $1",
             user_id,
         )
         return dict(row) if row else None
 
 
 async def clear_user_state(user_id: int) -> None:
+    await set_user_state(user_id, "idle", None)
+
+
+async def save_last_mid(user_id: int, mid: str | None, text: str | None = None) -> None:
+    if not mid:
+        return
     pool = get_db_pool()
     async with pool.acquire() as conn:
-        await conn.execute("DELETE FROM user_states WHERE user_id = $1", user_id)
+        await conn.execute(
+            """
+            INSERT INTO user_states (user_id, state, last_mid, last_text)
+            VALUES ($1, 'idle', $2, $3)
+            ON CONFLICT (user_id) DO UPDATE
+                SET last_mid = EXCLUDED.last_mid,
+                    last_text = EXCLUDED.last_text
+            """,
+            user_id,
+            mid,
+            text,
+        )
 
 
 async def create_order(

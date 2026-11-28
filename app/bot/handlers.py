@@ -3,8 +3,9 @@ import logging
 
 from bot.client import MaxClient
 from bot.keyboards import back_to_home_keyboard, main_menu_keyboard, tax_modes_keyboard
-from services.calc_flow import handle_calc_text
-from services.orders import clear_user_state
+from bot.screens import screen_text
+from services.calc_flow import build_calc_reply
+from services.orders import clear_user_state, get_user_state, save_last_mid
 from services.users import TAX_LABELS, get_or_create_user, set_user_tax_mode
 
 logger = logging.getLogger("max-bot.handlers")
@@ -40,37 +41,35 @@ def _extract_user_id(payload: dict) -> int | None:
     return _extract_chat_id(payload)
 
 
-def _extract_message_id(payload: dict) -> str | None:
+def _extract_msg_body(payload: dict) -> tuple[str | None, str]:
     msg = payload.get("message")
     body = msg.get("body") if isinstance(msg, dict) else None
-    mid = body.get("mid") if isinstance(body, dict) else None
-    return mid if isinstance(mid, str) and mid else None
+    if not isinstance(body, dict):
+        return None, ""
+    mid = body.get("mid") if isinstance(body.get("mid"), str) and body.get("mid") else None
+    text = body.get("text").strip() if isinstance(body.get("text"), str) else ""
+    return mid, text
 
 
-def _extract_text(payload: dict) -> str:
-    msg = payload.get("message")
-    body = msg.get("body") if isinstance(msg, dict) else None
-    text = body.get("text") if isinstance(body, dict) else None
-    return text.strip() if isinstance(text, str) else ""
-
-
-def _home_text(tax_mode: str) -> str:
-    tax_name = TAX_LABELS.get(tax_mode, tax_mode)
-    return (
-        "**🚚 Ехали! • Ассистент логиста**\n"
-        f"Налог: **{tax_name}**\n\n"
-        "Пришли параметры рейса (или перешли пост из чата) либо выбери инструмент:"
-    )
-
-
-async def _render_screen(
-    chat_id: int, message_id: str | None, text: str, buttons: list[list[dict]], max_client: MaxClient
+async def _send_fresh_menu(
+    chat_id: int | None, user_id: int, text: str, buttons: list[list[dict]], max_client: MaxClient, direct_uid: int | None = None
 ) -> None:
-    if message_id:
-        res = await max_client.edit_message(message_id, text, buttons=buttons)
-        if res:
-            return
-    await max_client.send_message(chat_id, text, buttons=buttons)
+    st = await get_user_state(user_id)
+    if st and (old_mid := st.get("last_mid")) and (old_txt := st.get("last_text")):
+        asyncio.create_task(max_client.edit_message(old_mid, old_txt, buttons=[]))
+    resp = await max_client.send_message(chat_id, text, buttons=buttons, user_id=direct_uid)
+    new_mid = ((resp.get("message") or {}).get("body") or {}).get("mid") if isinstance(resp, dict) else None
+    if isinstance(new_mid, str) and new_mid:
+        await save_last_mid(user_id, new_mid, text)
+
+
+async def _edit_or_send(
+    chat_id: int, user_id: int, mid: str | None, text: str, buttons: list[list[dict]], max_client: MaxClient
+) -> None:
+    if mid and await max_client.edit_message(mid, text, buttons=buttons):
+        await save_last_mid(user_id, mid, text)
+        return
+    await _send_fresh_menu(chat_id, user_id, text, buttons, max_client)
 
 
 async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
@@ -81,7 +80,7 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
 
     cb_id = cb.get("callback_id") if isinstance(cb.get("callback_id"), str) else None
     data = cb.get("payload", "")
-    mid = _extract_message_id(payload)
+    mid, old_text = _extract_msg_body(payload)
     if not isinstance(data, str):
         return
 
@@ -90,37 +89,32 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
         asyncio.create_task(max_client.answer_callback(cb_id, notification=toast))
 
     user = await get_or_create_user(user_id)
+    tax = user["tax_mode"]
 
-    if data == "screen:home":
+    if data == "screen:home_new":
         await clear_user_state(user_id)
-        await _render_screen(chat_id, mid, _home_text(user["tax_mode"]), main_menu_keyboard(), max_client)
+        if mid and old_text:
+            asyncio.create_task(max_client.edit_message(mid, old_text, buttons=[]))
+        home_txt = screen_text("home", tax)
+        resp = await max_client.send_message(chat_id, home_txt, buttons=main_menu_keyboard())
+        new_mid = ((resp.get("message") or {}).get("body") or {}).get("mid") if isinstance(resp, dict) else None
+        await save_last_mid(user_id, new_mid, home_txt)
+    elif data == "screen:home":
+        await clear_user_state(user_id)
+        await _edit_or_send(chat_id, user_id, mid, screen_text("home", tax), main_menu_keyboard(), max_client)
     elif data == "screen:tax":
-        text = f"**⚙️ Система налогообложения**\nСейчас: **{TAX_LABELS.get(user['tax_mode'], user['tax_mode'])}**"
-        await _render_screen(chat_id, mid, text, tax_modes_keyboard(user["tax_mode"]), max_client)
+        await _edit_or_send(chat_id, user_id, mid, screen_text("tax", tax), tax_modes_keyboard(tax), max_client)
     elif data.startswith("tax:"):
-        tax_mode = data.removeprefix("tax:")
+        new_tax = data.removeprefix("tax:")
         try:
-            await set_user_tax_mode(user_id, tax_mode)
+            await set_user_tax_mode(user_id, new_tax)
         except ValueError:
             return
-        text = f"**⚙️ Система налогообложения**\nСейчас: **{TAX_LABELS[tax_mode]}**"
-        await _render_screen(chat_id, mid, text, tax_modes_keyboard(tax_mode), max_client)
-    elif data == "screen:calc":
+        await _edit_or_send(chat_id, user_id, mid, screen_text("tax", new_tax), tax_modes_keyboard(new_tax), max_client)
+    elif data in ("screen:calc", "screen:inn", "screen:ttn"):
         await clear_user_state(user_id)
-        text = (
-            "**🧮 Стоп-цена и маржа**\n"
-            "Напиши рейс одной строкой или перешли пост с грузом:\n"
-            "`нск омск 20т 140 с ндс / 100 ип подача 40`"
-        )
-        await _render_screen(chat_id, mid, text, back_to_home_keyboard(), max_client)
-    elif data == "screen:inn":
-        await clear_user_state(user_id)
-        text = "**🛡 Проверка ИНН**\nОтправь `10` или `12` цифр ИНН контрагента:"
-        await _render_screen(chat_id, mid, text, back_to_home_keyboard(), max_client)
-    elif data == "screen:ttn":
-        await clear_user_state(user_id)
-        text = "**📄 Сбор ТТН**\nСоздание ссылки для водителя (скоро)"
-        await _render_screen(chat_id, mid, text, back_to_home_keyboard(), max_client)
+        scr = data.removeprefix("screen:")
+        await _edit_or_send(chat_id, user_id, mid, screen_text(scr, tax), back_to_home_keyboard(), max_client)
 
 
 async def handle_update(payload: dict, max_client: MaxClient) -> None:
@@ -130,9 +124,7 @@ async def handle_update(payload: dict, max_client: MaxClient) -> None:
         if uid is not None:
             await clear_user_state(uid)
             user = await get_or_create_user(uid)
-            await max_client.send_message(
-                cid, _home_text(user["tax_mode"]), buttons=main_menu_keyboard(), user_id=uid
-            )
+            await _send_fresh_menu(cid, uid, screen_text("home", user["tax_mode"]), main_menu_keyboard(), max_client, direct_uid=uid)
     elif update_type == "message_callback":
         await _handle_callback(payload, max_client)
     elif update_type == "message_created":
@@ -140,23 +132,20 @@ async def handle_update(payload: dict, max_client: MaxClient) -> None:
         if cid is None or uid is None:
             return
         user = await get_or_create_user(uid)
-        raw_text = _extract_text(payload)
+        tax = user["tax_mode"]
+        _, raw_text = _extract_msg_body(payload)
         lower = raw_text.lower()
 
         if lower.startswith("/start"):
             await clear_user_state(uid)
-            await max_client.send_message(cid, _home_text(user["tax_mode"]), buttons=main_menu_keyboard())
+            await _send_fresh_menu(cid, uid, screen_text("home", tax), main_menu_keyboard(), max_client)
         elif lower.startswith("/tax"):
             await clear_user_state(uid)
-            msg = f"**⚙️ Система налогообложения**\nСейчас: **{TAX_LABELS.get(user['tax_mode'], user['tax_mode'])}**"
-            await max_client.send_message(cid, msg, buttons=tax_modes_keyboard(user["tax_mode"]))
-        elif lower.startswith("/calc"):
+            await _send_fresh_menu(cid, uid, screen_text("tax", tax), tax_modes_keyboard(tax), max_client)
+        elif lower.startswith("/calc") or lower.startswith("/inn"):
             await clear_user_state(uid)
-            msg = "**🧮 Стоп-цена и маржа**\nНапиши рейс одной строкой или перешли пост с грузом:\n`нск омск 20т 140 с ндс / 100 ип подача 40`"
-            await max_client.send_message(cid, msg, buttons=back_to_home_keyboard())
-        elif lower.startswith("/inn"):
-            await clear_user_state(uid)
-            msg = "**🛡 Проверка ИНН**\nОтправь `10` или `12` цифр ИНН контрагента:"
-            await max_client.send_message(cid, msg, buttons=back_to_home_keyboard())
+            scr = "calc" if lower.startswith("/calc") else "inn"
+            await _send_fresh_menu(cid, uid, screen_text(scr, tax), back_to_home_keyboard(), max_client)
         elif raw_text:
-            await handle_calc_text(cid, uid, raw_text, user["tax_mode"], max_client)
+            reply_text, kb = await build_calc_reply(uid, raw_text, tax)
+            await _send_fresh_menu(cid, uid, reply_text, kb, max_client)
