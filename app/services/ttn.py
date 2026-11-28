@@ -93,7 +93,7 @@ async def add_shipment_page(shipment_id: int, image_bytes: bytes) -> int:
     return page_num
 
 
-async def build_shipment_pdf(shipment_id: int, driver_user_id: int) -> tuple[dict, bytes] | None:
+async def prepare_shipment_pdf(shipment_id: int, driver_user_id: int) -> tuple[dict, bytes] | None:
     pool = get_db_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -108,8 +108,12 @@ async def build_shipment_pdf(shipment_id: int, driver_user_id: int) -> tuple[dic
             "SELECT file_path FROM shipment_pages WHERE shipment_id = $1 ORDER BY page_num ASC",
             shipment_id,
         )
-        if not rows:
-            raise ValueError("Ты ещё не отправил ни одного фото ТТН.")
-        pdf_bytes = img2pdf.convert([r["file_path"] for r in rows])
+    if not rows:
+        raise ValueError("Ты ещё не отправил ни одного фото ТТН.")
+    return dict(row), img2pdf.convert([r["file_path"] for r in rows])
+
+
+async def mark_shipment_completed(shipment_id: int) -> None:
+    pool = get_db_pool()
+    async with pool.acquire() as conn:
         await conn.execute("UPDATE shipments SET status = 'completed' WHERE id = $1", shipment_id)
-    return dict(row), pdf_bytes

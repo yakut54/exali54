@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import httpx
 from config import settings
@@ -134,10 +135,18 @@ class MaxClient:
         upload.raise_for_status()
         uploaded = await self._client.post(upload.json()["url"], files={"data": (filename, file_bytes, "application/pdf")})
         uploaded.raise_for_status()
-        attachments: list[dict] = [{"type": "file", "payload": {"token": uploaded.json()["token"]}}]
+        await asyncio.sleep(0.8)
+        attachments: list[dict] = [{"type": "file", "payload": uploaded.json()}]
         if buttons:
             attachments.append({"type": "inline_keyboard", "payload": {"buttons": buttons}})
-        response = await self._client.post("/messages", params={"chat_id": chat_id}, json={"text": caption, "format": "markdown", "attachments": attachments})
+        body = {"text": caption, "format": "markdown", "attachments": attachments}
+        response = await self._client.post("/messages", params={"chat_id": chat_id}, json=body)
+        for _ in range(2):
+            if response.status_code != 400:
+                break
+            logger.warning("MAX /messages with file failed (%s): %s", response.status_code, response.text)
+            await asyncio.sleep(1.0)
+            response = await self._client.post("/messages", params={"chat_id": chat_id}, json=body)
         response.raise_for_status()
         return response.json()
 

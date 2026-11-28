@@ -6,8 +6,9 @@ from services.orders import clear_user_state, set_user_state
 from services.ttn import (
     add_shipment_page,
     attach_driver_to_shipment,
-    build_shipment_pdf,
     create_shipment,
+    mark_shipment_completed,
+    prepare_shipment_pdf,
 )
 
 
@@ -60,7 +61,7 @@ async def handle_driver_photos(
 
 async def finish_driver_ttn(driver_uid: int, shipment_id: int, max_client: MaxClient) -> str:
     try:
-        result = await build_shipment_pdf(shipment_id, driver_uid)
+        result = await prepare_shipment_pdf(shipment_id, driver_uid)
     except ValueError as exc:
         return str(exc)
     if result is None:
@@ -73,5 +74,6 @@ async def finish_driver_ttn(driver_uid: int, shipment_id: int, max_client: MaxCl
         caption=f"📄 **ТТН по рейсу `{shipment['token']}` готовы!**",
         buttons=keep_result_menu_keyboard(),
     )
+    await mark_shipment_completed(shipment_id)
     await clear_user_state(driver_uid)
     return "✅ Документы склеены в PDF и отправлены логисту! Спасибо."
