@@ -32,7 +32,7 @@ class RateHintTests(unittest.TestCase):
     def test_city_normalization(self):
         self.assertEqual(normalize_city_name("улан уде"), "Улан-Удэ")
         self.assertEqual(normalize_city_name("мхч"), "Махачкала")
-        self.assertTrue(has_known_cities("тайшет айхал"))
+        self.assertTrue(has_known_cities("тайшет вилюйск"))
 
 
 if __name__ == "__main__":
