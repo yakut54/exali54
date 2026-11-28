@@ -96,6 +96,28 @@ def _normalize_rate(raw: Decimal | None, rate_type: str, weight_t: Decimal | Non
         return raw
     short_total = rate_type == "total" and Decimal("15") <= raw < Decimal("2000") and not re.search(r"(?:км|р\s*/\s*км|за\s+км)", text.lower())
     return raw * Decimal("1000") if short_total or raw < Decimal("1000") else raw
+
+
+def _rate_hint(text: str) -> tuple[Decimal, str, bool | None] | None:
+    """Extract an unambiguous client-rate candidate from a short message."""
+    lowered = text.lower()
+    for match in re.finditer(r"(?<![\d/])(\d+(?:[.,]\d+)?)\s*(тыс|к|кг|т|м3|м²)?", lowered):
+        raw_text, suffix = match.group(1), match.group(2) or ""
+        tail = lowered[match.end():match.end() + 3]
+        if (suffix in {"кг", "т", "м3", "м²"} or
+                tail.startswith(("кг", "т", "м3", "м²")) or
+                re.match(r"[./]\s*\d", tail)):
+            continue
+        raw = _to_decimal(raw_text)
+        if raw is None:
+            continue
+        window = lowered[max(0, match.start() - 20):match.end() + 20]
+        rate_type = "per_km" if re.search(r"(?:км|р\s*/\s*км|руб(?:лей)?\s*/\s*км|за\s+км|по\s+км)", window) else "total"
+        vat = True if re.search(r"(?:ндс|осно)", window) else None
+        return raw, rate_type, vat
+    return None
+
+
 async def parse_order_text(text: str, in_dist_mode: bool = False) -> ParsedOrder | None:
     if not _looks_like_order(text, in_dist_mode):
         return None
@@ -148,6 +170,15 @@ async def parse_order_text(text: str, in_dist_mode: bool = False) -> ParsedOrder
     c_type = data.get("client_rate_type") if data.get("client_rate_type") in ("total", "per_ton", "per_km") else "total"
     p_type = data.get("carrier_rate_type") if data.get("carrier_rate_type") in ("total", "per_ton", "per_km") else "total"
     client_raw = _to_decimal(data.get("client_rate_raw"))
+    hint = _rate_hint(text)
+    has_km_marker = bool(re.search(r"(?:км|р\s*/\s*км|за\s+км|по\s+км)", text.lower()))
+    if not has_km_marker and c_type == "per_km":
+        c_type = "total"
+    if client_raw is None and hint:
+        client_raw, hinted_type, hinted_vat = hint
+        c_type = hinted_type
+        if hinted_vat is not None and data.get("client_vat") is None:
+            data["client_vat"] = hinted_vat
     carrier_raw = _to_decimal(data.get("carrier_rate_raw"))
     target_profit = _normalize_rate(_to_decimal(data.get("target_profit_raw")), "total", weight_t, None, warnings, text)
     carrier_markers = r"\b(перевоз|перевозчик|водител|машин|ип|на\s+карт|нал)\w*"
