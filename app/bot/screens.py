@@ -31,7 +31,8 @@ def screen_text(screen: str, tax_mode: str = "osno_22") -> str:
         return (
             "**🧮 Стоп-цена и маржа**\n"
             "Напиши рейс одной строкой или перешли пост с грузом:\n"
-            "`нск омск 20т 140 с ндс / 100 ип подача 40`"
+            "`нск омск 20т 140 с ндс / 100 ип подача 40`\n"
+            "Для расстояния и ₽/км: `Уссурийск Москва 750 тыс наличкой сколько руб/км`"
         )
     if screen == "inn":
         return "**🛡 Проверка ИНН**\nОтправь `10` или `12` цифр ИНН контрагента:"
@@ -46,10 +47,14 @@ def format_calc_card(
     client_vat: bool | None,
     carrier_vat: bool | None,
     extra_notes: list[str],
+    distance_km: int | None = None,
+    distance_approx: bool = False,
 ) -> str:
     title = f"**📍 {route_from or 'Откуда'} → {route_to or 'Куда'}**"
     if weight_t is not None:
         title += f" ({weight_t:g} т)"
+    if distance_km:
+        title += f" · {'~' if distance_approx else ''}{distance_km} км"
 
     profit_icon = "🟢" if res.net_profit > 0 else "🔴"
     lines = [

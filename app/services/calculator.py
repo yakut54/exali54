@@ -15,6 +15,15 @@ TWO_PLACES = Decimal("0.01")
 def _r2(val: Decimal) -> Decimal:
     return val.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
 
+def rate_breakdown_by_vat(amount: Decimal, is_vat_included: bool, distance_km: int | None) -> dict:
+    no_vat = _r2(amount * Decimal("100") / Decimal("122")) if is_vat_included else amount
+    with_vat = amount if is_vat_included else _r2(amount * Decimal("122") / Decimal("100"))
+    result = {"no_vat": no_vat, "with_vat": with_vat}
+    if distance_km and distance_km > 0:
+        result["no_vat_per_km"] = (no_vat / Decimal(distance_km)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        result["with_vat_per_km"] = (with_vat / Decimal(distance_km)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    return result
+
 
 @dataclass(frozen=True)
 class CalcResult:

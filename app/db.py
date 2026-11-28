@@ -97,6 +97,13 @@ CREATE TABLE IF NOT EXISTS parse_failures (
     raw_text TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS route_cache (
+    route_key VARCHAR(256) PRIMARY KEY,
+    distance_km INT NOT NULL,
+    is_approx BOOLEAN NOT NULL DEFAULT FALSE,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 
