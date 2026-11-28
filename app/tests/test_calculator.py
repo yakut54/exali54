@@ -21,6 +21,29 @@ class CalculatorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             calculate_margin("usn_6", Decimal("0"), Decimal("100"))
 
+    def test_all_tax_modes_calculate(self):
+        expected = {
+            "osno_22": Decimal("10450.82"),
+            "usn_5_nds": Decimal("29047.62"),
+            "usn_6": Decimal("1934.43"),
+            "usn_6_agent": Decimal("10934.43"),
+            "usn_15": Decimal("6434.43"),
+        }
+        for mode, profit in expected.items():
+            with self.subTest(mode=mode):
+                result = calculate_margin(
+                    mode,
+                    Decimal("200000"),
+                    Decimal("150000"),
+                    client_vat=True,
+                    carrier_vat=False,
+                    weight_t=Decimal("20"),
+                    deadhead_km=Decimal("40"),
+                    route_km=2201,
+                )
+                self.assertEqual(result.net_profit, profit)
+                self.assertEqual(result.platon_hint, Decimal("8723.09"))
+
 
 if __name__ == "__main__":
     unittest.main()
