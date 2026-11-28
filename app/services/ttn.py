@@ -3,12 +3,13 @@ import secrets
 from pathlib import Path
 
 import img2pdf
-from PIL import Image, ImageFilter, ImageOps, ImageStat
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps, ImageStat
 
 from config import settings
 from db import get_db_pool
 
 _SHIPMENT_FIELDS = "id, token, logist_user_id, logist_chat_id, driver_user_id, status"
+A4_SIZE = (1654, 2339)
 
 
 async def create_shipment(logist_user_id: int, logist_chat_id: int) -> str:
@@ -60,9 +61,14 @@ def check_photo_quality(image_bytes: bytes) -> tuple[bool, str]:
 
 def _to_jpeg(image_bytes: bytes) -> bytes:
     with Image.open(io.BytesIO(image_bytes)) as img:
-        rgb = ImageOps.exif_transpose(img).convert("RGB")
-    out = io.BytesIO()
-    rgb.save(out, format="JPEG", quality=90)
+        rgb = ImageOps.autocontrast(ImageOps.exif_transpose(img).convert("RGB"), cutoff=2)
+    rgb = rgb.transpose(Image.ROTATE_270) if rgb.width > rgb.height else rgb
+    rgb = ImageEnhance.Sharpness(rgb).enhance(1.6)
+    rgb = ImageEnhance.Contrast(rgb).enhance(1.25)
+    resized = ImageOps.contain(rgb, A4_SIZE, Image.Resampling.LANCZOS)
+    page = Image.new("RGB", A4_SIZE, "white")
+    page.paste(resized, ((A4_SIZE[0] - resized.width) // 2, (A4_SIZE[1] - resized.height) // 2))
+    page.save(out := io.BytesIO(), format="JPEG", quality=82, optimize=True)
     return out.getvalue()
 
 
