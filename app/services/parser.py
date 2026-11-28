@@ -4,14 +4,10 @@ import re
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-
 import httpx
-
 from config import settings
 from services.distance import CITY_ALIASES, get_road_distance_km
-
 logger = logging.getLogger("max-bot.parser")
-
 _PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "order_parser.txt"
 SYSTEM_PROMPT = _PROMPT_PATH.read_text(encoding="utf-8").strip()
 @dataclass(frozen=True)
@@ -30,8 +26,11 @@ class ParsedOrder:
     is_cash: bool = False
     distance_km: int | None = None
     client_rate_type: str = "total"
+    cargo_name: str | None = None
+    body_type: str | None = None
+    cargo_date: str | None = None
+    target_profit: Decimal | None = None
     warnings: list[str] = field(default_factory=list)
-
 def _looks_like_order(text: str) -> bool:
     numbers = re.findall(r"\d+(?:[.,]\d+)?", text)
     if len(text) > 1500:
@@ -40,7 +39,6 @@ def _looks_like_order(text: str) -> bool:
     cities_only = re.fullmatch(r"[А-ЯЁ][а-яё-]+[ -]+[А-ЯЁ][а-яё-]+", text.strip())
     short_route = len(parts) == 2 and all(part in CITY_ALIASES for part in parts)
     return bool(numbers) or bool(cities_only) or short_route or bool(re.search(r"\b(км|километр|расстояни|пробег)\b", text.lower()))
-
 def _to_decimal(val) -> Decimal | None:
     if val is None or isinstance(val, bool):
         return None
@@ -53,8 +51,6 @@ def _to_decimal(val) -> Decimal | None:
         return Decimal(s)
     except (InvalidOperation, ValueError):
         return None
-
-
 def _normalize_rate(raw: Decimal | None, rate_type: str, weight_t: Decimal | None, distance_km: int | None, warnings: list[str], text: str) -> Decimal | None:
     if raw is None or raw <= 0:
         return None
@@ -70,8 +66,6 @@ def _normalize_rate(raw: Decimal | None, rate_type: str, weight_t: Decimal | Non
         return raw
     short_total = rate_type == "total" and Decimal("15") <= raw < Decimal("2000") and not re.search(r"(?:км|р\s*/\s*км|за\s+км)", text.lower())
     return raw * Decimal("1000") if short_total or raw < Decimal("1000") else raw
-
-
 async def parse_order_text(text: str) -> ParsedOrder | None:
     if not _looks_like_order(text) or not settings.DEEPSEEK_API_KEY:
         return None
@@ -108,12 +102,17 @@ async def parse_order_text(text: str) -> ParsedOrder | None:
     distance_km = distance[0] if distance else None
     c_type = data.get("client_rate_type") if data.get("client_rate_type") in ("total", "per_ton", "per_km") else "total"
     p_type = data.get("carrier_rate_type") if data.get("carrier_rate_type") in ("total", "per_ton", "per_km") else "total"
-    client_rate = _normalize_rate(_to_decimal(data.get("client_rate_raw")), c_type, weight_t, distance_km, warnings, text)
+    client_raw = _to_decimal(data.get("client_rate_raw"))
+    carrier_raw = _to_decimal(data.get("carrier_rate_raw"))
+    target_profit = _normalize_rate(_to_decimal(data.get("target_profit_raw")), "total", weight_t, None, warnings, text)
+    carrier_markers = r"\b(перевоз|перевозчик|водител|машин|ип|на\s+карт|нал)\w*"
+    if target_profit is not None and client_raw and carrier_raw is None and re.search(carrier_markers, text.lower()):
+        carrier_raw, client_raw, p_type = client_raw, None, c_type
+    client_rate = _normalize_rate(client_raw, c_type, weight_t, distance_km, warnings, text)
     if client_rate is None and not (from_city and to_city):
         return None
-
     client_alt_rate = _normalize_rate(_to_decimal(data.get("client_alt_rate_raw")), c_type, weight_t, distance_km, warnings, text)
-    carrier_rate = _normalize_rate(_to_decimal(data.get("carrier_rate_raw")), p_type, weight_t, distance_km, warnings, text)
+    carrier_rate = _normalize_rate(carrier_raw, p_type, weight_t, distance_km, warnings, text)
     deadhead_km = _to_decimal(data.get("deadhead_km"))
     if deadhead_km is not None and deadhead_km < 0:
         deadhead_km = None
@@ -123,7 +122,8 @@ async def parse_order_text(text: str) -> ParsedOrder | None:
         c_vat = False
     c_alt_vat = data.get("client_alt_vat") if isinstance(data.get("client_alt_vat"), bool) else None
     p_vat = data.get("carrier_vat") if isinstance(data.get("carrier_vat"), bool) else None
-
     mode = data.get("calc_mode") if data.get("calc_mode") in ("margin", "rate_per_km") else "margin"
     return ParsedOrder(from_city, to_city, weight_t, client_rate, c_vat, carrier_rate, p_vat,
-                       client_alt_rate, c_alt_vat, deadhead_km, mode, is_cash, distance_km, c_type, warnings)
+                       client_alt_rate, c_alt_vat, deadhead_km, mode, is_cash, distance_km, c_type,
+                       data.get("cargo_name"), data.get("body_type"), data.get("cargo_date"),
+                       target_profit, warnings)

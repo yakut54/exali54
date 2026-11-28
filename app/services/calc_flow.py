@@ -1,8 +1,8 @@
+from dataclasses import replace
 from decimal import Decimal
-
 from bot.keyboards import calc_result_keyboard, keep_result_menu_keyboard
 from bot.screens import fmt_money, format_calc_card, vat_tag
-from services.calc_parse import max_carrier_breakeven, parse_carrier_reply, pick_client_offer
+from services.calc_parse import max_carrier_breakeven, parse_carrier_reply, pick_client_offer, solve_rate_for_target_profit
 from services.calculator import calculate_margin
 from services.calculator import rate_breakdown_by_vat
 from services.distance import get_road_distance_km
@@ -16,8 +16,6 @@ from services.orders import (
 )
 from services.parser import parse_order_text
 from services.users import is_calc_limit_exceeded, log_parse_failure
-
-
 async def build_calc_reply(
     user_id: int, raw_text: str, tax_mode: str, in_dist_mode: bool = False
 ) -> tuple[str, list[list[dict]]]:
@@ -42,7 +40,6 @@ async def build_calc_reply(
                 card = format_calc_card(order["route_from"], order["route_to"], w_t, res, order["client_vat"], carrier_vat, [], dist[0] if dist else None, dist[1] if dist else False)
                 return card, calc_result_keyboard(order["id"])
         await clear_user_state(user_id)
-
     parsed = await parse_order_text(raw_text)
     if parsed is None:
         if in_dist_mode:
@@ -53,11 +50,27 @@ async def build_calc_reply(
             "Пришли заявку, например: `нск омск 20т 140 с ндс / 100 ип`.",
             keep_result_menu_keyboard(),
         )
-
     dist = await get_road_distance_km(parsed.from_city, parsed.to_city)
     if in_dist_mode and not (parsed.from_city and parsed.to_city):
         return "🤔 Укажи два города (например: спб мск или Уссурийск Москва 750 тыс нал)", keep_result_menu_keyboard()
-    if parsed.client_rate is None:
+    client_rate, client_vat, fork_note = pick_client_offer(parsed, tax_mode)
+    carrier_rate = parsed.carrier_rate
+    extra_notes = ([fork_note] if fork_note else []) + list(parsed.warnings)
+    if parsed.target_profit is not None and ((client_rate is None) != (carrier_rate is None)):
+        target = solve_rate_for_target_profit(
+            tax_mode, parsed.target_profit, client_rate, carrier_rate,
+            bool(client_vat), bool(parsed.carrier_vat), parsed.weight_t,
+            parsed.deadhead_km, dist[0] if dist else None,
+        )
+        if target is None:
+            return "⚠️ При этой ставке желаемая прибыль недостижима после налогов.", keep_result_menu_keyboard()
+        if client_rate is None:
+            client_rate = target
+        else:
+            carrier_rate = target
+        extra_notes.append(f"🎯 Подобрано под желаемую прибыль: {fmt_money(parsed.target_profit)} ₽")
+        parsed = replace(parsed, client_rate=client_rate, carrier_rate=carrier_rate)
+    if client_rate is None:
         if in_dist_mode and parsed.from_city and parsed.to_city:
             text = (f"📍 {parsed.from_city} → {parsed.to_city}\n"
                     f"🛣 Расстояние по автодорогам: **{'~' if dist[1] else ''}{dist[0]} км**") if dist else f"⚠️ Не удалось определить расстояние между **{parsed.from_city}** и **{parsed.to_city}**."
@@ -66,7 +79,6 @@ async def build_calc_reply(
             return "🤔 Укажи два города (например: спб мск или Уссурийск Москва 750 тыс нал)", keep_result_menu_keyboard()
         await log_parse_failure(user_id, raw_text)
         return "🤔 Не смог найти маршрут и ставку. Пришли заявку одной строкой.", keep_result_menu_keyboard()
-    client_rate, client_vat, fork_note = pick_client_offer(parsed, tax_mode)
     if parsed.client_rate_type == "per_km" and dist and parsed.distance_km is None:
         client_rate *= dist[0]
     if (in_dist_mode or parsed.calc_mode == "rate_per_km") and (in_dist_mode or parsed.carrier_rate is None):
@@ -80,17 +92,14 @@ async def build_calc_reply(
             f"С НДС 22%: **{fmt_money(breakdown['with_vat'])} ₽**" + (f" · **{breakdown['with_vat_per_km']:.1f} ₽/км**" if per_km else ""),
             keep_result_menu_keyboard(),
         )
-    extra_notes = ([fork_note] if fork_note else []) + list(parsed.warnings)
     c_vat_eff = bool(client_vat) if client_vat is not None else (tax_mode in ("osno_22", "usn_5_nds"))
-
-    if parsed.carrier_rate is None:
+    if carrier_rate is None:
         order_id = await create_order(user_id, raw_text, parsed, client_rate, client_vat, status="draft")
         await set_user_state(user_id, "wait_carrier_rate", order_id=order_id)
         if client_vat is False and tax_mode == "osno_22":
             extra_notes.insert(0, "Вы на ОСНО: НДС 22% выделен из ставки клиента, уточните договор.")
         elif client_vat is False and tax_mode == "usn_5_nds":
             extra_notes.insert(0, "УСН + НДС 5%: в ставку клиента заложен НДС 5%.")
-
         max_no_vat, max_with_vat = max_carrier_breakeven(tax_mode, client_rate)
         route = f"**📍 {parsed.from_city or 'Откуда'} → {parsed.to_city or 'Куда'}**" + (f" ({parsed.weight_t:g} т)" if parsed.weight_t else "")
         lines = [route, f"Заказчик: **{fmt_money(client_rate)} ₽** ({vat_tag(client_vat)})", f"Потолок в ноль (без НДС): **{fmt_money(max_no_vat)} ₽**"]
@@ -100,13 +109,10 @@ async def build_calc_reply(
         if extra_notes:
             lines.extend(["", *(f"⚠️ {n}" for n in extra_notes)])
         return "\n".join(lines), keep_result_menu_keyboard()
-
-    res = calculate_margin(tax_mode, client_rate, parsed.carrier_rate, client_vat=c_vat_eff, carrier_vat=bool(parsed.carrier_vat), weight_t=parsed.weight_t, deadhead_km=parsed.deadhead_km, route_km=dist[0] if dist else None)
+    res = calculate_margin(tax_mode, client_rate, carrier_rate, client_vat=c_vat_eff, carrier_vat=bool(parsed.carrier_vat), weight_t=parsed.weight_t, deadhead_km=parsed.deadhead_km, route_km=dist[0] if dist else None)
     order_id = await create_order(user_id, raw_text, parsed, client_rate, client_vat, margin=res.net_profit, status="calculated")
     card = format_calc_card(parsed.from_city, parsed.to_city, parsed.weight_t, res, client_vat, parsed.carrier_vat, extra_notes, dist[0] if dist else None, dist[1] if dist else False)
     return card, calc_result_keyboard(order_id)
-
-
 async def start_recalc_carrier(user_id: int, order_id: int, tax_mode: str) -> str | None:
     """Открыть повторный торг: запомнить рейс и вернуть подсказку со ставками."""
     order = await get_order(order_id, user_id)
