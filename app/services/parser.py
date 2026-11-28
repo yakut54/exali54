@@ -90,7 +90,7 @@ async def parse_order_text(text: str) -> ParsedOrder | None:
             choices = resp.json().get("choices") or []
             if not choices:
                 return None
-            content = choices.get("message", {}).get("content", "")
+            content = next(iter(choices)).get("message", {}).get("content", "")
             data = json.loads(content)
     except Exception as exc:
         logger.warning("Failed to parse order via LLM: %s", exc)
