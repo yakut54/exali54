@@ -52,11 +52,20 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
     elif data == "screen:ttn":
         reply, kb = await start_ttn_for_logist(user_id, chat_id, max_client.bot_username)
         await send_fresh_menu(chat_id, user_id, reply, kb, max_client)
-    elif data == "ttn:done" and (st := await get_user_state(user_id) or {}).get("state") == "wait_ttn_photo" and st.get("order_id"):
-        await send_fresh_menu(chat_id, user_id, await finish_driver_ttn(user_id, st["order_id"], max_client), keep_result_menu_keyboard(), max_client)
-    elif data == "ttn:force_last" and (st := await get_user_state(user_id) or {}).get("state") == "wait_ttn_photo" and st.get("order_id"):
-        reply, kb = await accept_pending_ttn_photo(user_id, st["order_id"])
-        await send_fresh_menu(chat_id, user_id, reply, kb or ttn_driver_keyboard(), max_client)
+    elif data in ("ttn:done", "ttn:force_last"):
+        if mid and old_text:
+            try:
+                await max_client.edit_message(mid, old_text, [])
+            except Exception:
+                pass
+        st = await get_user_state(user_id) or {}
+        if st.get("state") != "wait_ttn_photo" or not st.get("order_id"):
+            await send_fresh_menu(chat_id, user_id, "ℹ️ Этот рейс уже закрыт и PDF отправлен логисту.", keep_result_menu_keyboard(), max_client)
+        elif data == "ttn:done":
+            await send_fresh_menu(chat_id, user_id, await finish_driver_ttn(user_id, st["order_id"], max_client), keep_result_menu_keyboard(), max_client)
+        else:
+            reply, kb = await accept_pending_ttn_photo(user_id, st["order_id"])
+            await send_fresh_menu(chat_id, user_id, reply, kb or ttn_driver_keyboard(), max_client)
     elif data.startswith("calc:recalc:") and data.removeprefix("calc:recalc:").isdigit():
         if reply := await start_recalc_carrier(user_id, int(data.removeprefix("calc:recalc:")), tax):
             await send_fresh_menu(chat_id, user_id, reply, back_to_home_keyboard(), max_client)

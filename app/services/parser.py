@@ -55,7 +55,7 @@ def _to_decimal(val) -> Decimal | None:
         return None
 
 
-def _normalize_rate(raw: Decimal | None, rate_type: str, weight_t: Decimal | None, distance_km: int | None, warnings: list[str]) -> Decimal | None:
+def _normalize_rate(raw: Decimal | None, rate_type: str, weight_t: Decimal | None, distance_km: int | None, warnings: list[str], text: str) -> Decimal | None:
     if raw is None or raw <= 0:
         return None
     if rate_type == "per_ton":
@@ -68,7 +68,8 @@ def _normalize_rate(raw: Decimal | None, rate_type: str, weight_t: Decimal | Non
             return raw * distance_km
         warnings.append("Ставка за км — требуется общий пробег")
         return raw
-    return raw * Decimal("1000") if raw < Decimal("1000") else raw
+    short_total = rate_type == "total" and Decimal("15") <= raw < Decimal("2000") and not re.search(r"(?:км|р\s*/\s*км|за\s+км)", text.lower())
+    return raw * Decimal("1000") if short_total or raw < Decimal("1000") else raw
 
 
 async def parse_order_text(text: str) -> ParsedOrder | None:
@@ -107,12 +108,12 @@ async def parse_order_text(text: str) -> ParsedOrder | None:
     distance_km = distance[0] if distance else None
     c_type = data.get("client_rate_type") if data.get("client_rate_type") in ("total", "per_ton", "per_km") else "total"
     p_type = data.get("carrier_rate_type") if data.get("carrier_rate_type") in ("total", "per_ton", "per_km") else "total"
-    client_rate = _normalize_rate(_to_decimal(data.get("client_rate_raw")), c_type, weight_t, distance_km, warnings)
+    client_rate = _normalize_rate(_to_decimal(data.get("client_rate_raw")), c_type, weight_t, distance_km, warnings, text)
     if client_rate is None and not (from_city and to_city):
         return None
 
-    client_alt_rate = _normalize_rate(_to_decimal(data.get("client_alt_rate_raw")), c_type, weight_t, distance_km, warnings)
-    carrier_rate = _normalize_rate(_to_decimal(data.get("carrier_rate_raw")), p_type, weight_t, distance_km, warnings)
+    client_alt_rate = _normalize_rate(_to_decimal(data.get("client_alt_rate_raw")), c_type, weight_t, distance_km, warnings, text)
+    carrier_rate = _normalize_rate(_to_decimal(data.get("carrier_rate_raw")), p_type, weight_t, distance_km, warnings, text)
     deadhead_km = _to_decimal(data.get("deadhead_km"))
     if deadhead_km is not None and deadhead_km < 0:
         deadhead_km = None
