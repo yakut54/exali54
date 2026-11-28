@@ -21,7 +21,7 @@ class ParsedOrder:
     from_city: str | None
     to_city: str | None
     weight_t: Decimal | None
-    client_rate: Decimal
+    client_rate: Decimal | None
     client_vat: bool | None
     carrier_rate: Decimal | None = None
     carrier_vat: bool | None = None
@@ -37,7 +37,10 @@ class ParsedOrder:
 
 def _looks_like_order(text: str) -> bool:
     numbers = re.findall(r"\d+(?:[.,]\d+)?", text)
-    return len(numbers) >= 1 and len(text) <= 1500
+    if len(text) > 1500:
+        return False
+    cities_only = re.fullmatch(r"[А-ЯЁ][а-яё-]+[ -]+[А-ЯЁ][а-яё-]+", text.strip())
+    return bool(numbers) or bool(cities_only) or bool(re.search(r"\b(км|километр|расстояни|пробег)\b", text.lower()))
 
 
 def _to_decimal(val) -> Decimal | None:
@@ -107,7 +110,7 @@ async def parse_order_text(text: str) -> ParsedOrder | None:
     c_type = data.get("client_rate_type") if data.get("client_rate_type") in ("total", "per_ton", "per_km") else "total"
     p_type = data.get("carrier_rate_type") if data.get("carrier_rate_type") in ("total", "per_ton", "per_km") else "total"
     client_rate = _normalize_rate(_to_decimal(data.get("client_rate_raw")), c_type, weight_t, distance_km, warnings)
-    if client_rate is None:
+    if client_rate is None and not (from_city and to_city):
         return None
 
     client_alt_rate = _normalize_rate(_to_decimal(data.get("client_alt_rate_raw")), c_type, weight_t, distance_km, warnings)

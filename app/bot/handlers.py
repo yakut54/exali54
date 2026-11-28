@@ -33,7 +33,7 @@ async def _handle_callback(payload: dict, max_client: MaxClient) -> None:
 
     if data == "screen:home_new":
         await send_home_screen(chat_id, user_id, mid, old_text, tax, max_client)
-    elif data in ("screen:home", "screen:calc"):
+    elif data in ("screen:home", "screen:calc", "screen:dist"):
         await clear_user_state(user_id)
         kb = main_menu_keyboard() if data == "screen:home" else back_to_home_keyboard()
         await edit_or_send(chat_id, user_id, mid, screen_text(data.removeprefix("screen:"), tax), kb, max_client)

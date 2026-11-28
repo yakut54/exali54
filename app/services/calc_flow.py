@@ -50,8 +50,19 @@ async def build_calc_reply(user_id: int, raw_text: str, tax_mode: str) -> tuple[
             keep_result_menu_keyboard(),
         )
 
-    client_rate, client_vat, fork_note = pick_client_offer(parsed, tax_mode)
     dist = await get_road_distance_km(parsed.from_city, parsed.to_city)
+    if parsed.client_rate is None and parsed.from_city and parsed.to_city:
+        if dist:
+            return (
+                f"📍 **{parsed.from_city} → {parsed.to_city}**\n"
+                f"🛣 Расстояние по автодорогам: **{'~' if dist[1] else ''}{dist[0]} км**",
+                keep_result_menu_keyboard(),
+            )
+        return (
+            f"⚠️ Не удалось определить расстояние между **{parsed.from_city}** и **{parsed.to_city}**.",
+            keep_result_menu_keyboard(),
+        )
+    client_rate, client_vat, fork_note = pick_client_offer(parsed, tax_mode)
     if parsed.client_rate_type == "per_km" and dist and parsed.distance_km is None:
         client_rate *= dist[0]
     if parsed.calc_mode == "rate_per_km" and parsed.carrier_rate is None:
